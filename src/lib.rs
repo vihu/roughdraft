@@ -5,4 +5,8 @@
 //! in web Excalidraw and here.
 #![deny(unsafe_code, missing_docs, rustdoc::broken_intra_doc_links)]
 
+pub mod color;
+pub mod geometry;
+pub mod render;
 pub mod scene;
+pub mod widget;

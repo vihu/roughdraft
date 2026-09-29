@@ -117,6 +117,8 @@ pub struct Text {
     pub vertical_align: VerticalAlign,
     /// Unitless line height; multiply by `font_size` for scene units.
     pub line_height: f64,
+    /// Shape or arrow this text is the label of.
+    pub container_id: Option<String>,
 }
 
 /// Corner rounding.
@@ -209,6 +211,17 @@ pub enum VerticalAlign {
     /// A value this version does not know, kept verbatim.
     #[serde(untagged)]
     Other(String),
+}
+
+impl Scene {
+    /// Returns `appState.viewBackgroundColor`, white when unset.
+    pub fn background_color(&self) -> &str {
+        self.json
+            .get("appState")
+            .and_then(|state| state.get("viewBackgroundColor"))
+            .and_then(Value::as_str)
+            .unwrap_or("#ffffff")
+    }
 }
 
 impl Kind {

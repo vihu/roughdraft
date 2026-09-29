@@ -14,3 +14,9 @@ rough-rs   = { version = "=0.1.0", default-features = false, features = ["svg_pa
 serde      = { version = "1", features = ["derive"] }
 # preserve_order keeps scene key order on save.
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+# Headless rendering for the playground's --snapshot; same rev as iced.
+iced_test = { git = "https://github.com/iced-rs/iced", rev = "90dec30cc7368c3fbaac69790e43a4b08a21691d" }
+# Reads Excalidraw's reference SVGs in tests/svg_parity.rs.
+roxmltree = "0.21"
