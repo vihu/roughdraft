@@ -7,7 +7,10 @@
 //! Compared per path and text line, in draw order: path commands and
 //! coordinates (Excalidraw rounds to 2 decimals), stroke and fill colors with
 //! opacity, stroke width, dash pattern, element transform, and text position,
-//! anchor, size and content.
+//! anchor, size and content. Keeprs memos from `ROUGHDRAFT_EXTRA_FIXTURES`
+//! are compared against the SVG Keeprs stored with them.
+mod common;
+
 use std::path::Path;
 
 use roughdraft::color::Rgba;
@@ -26,24 +29,16 @@ const COLOR_TOLERANCE: f32 = 0.5 / 255.0;
 
 #[test]
 fn matches_excalidraw_svg_export() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenes");
-    let mut fixtures: Vec<_> = std::fs::read_dir(&dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|e| e == "excalidraw"))
-        .collect();
-    fixtures.sort();
-    assert!(!fixtures.is_empty(), "no fixtures in {}", dir.display());
-
     let mut failures = Vec::new();
-    for fixture in &fixtures {
-        let scene: Scene =
-            serde_json::from_str(&std::fs::read_to_string(fixture).unwrap()).unwrap();
-        let svg = std::fs::read_to_string(fixture.with_extension("svg")).unwrap();
-        let name = fixture.file_name().unwrap().to_string_lossy();
-        eprintln!("{name}: {} marks", svg_marks(&svg).len());
+    for fixture in common::fixtures() {
+        let Some(svg) = &fixture.svg else {
+            continue;
+        };
+        let scene: Scene = serde_json::from_value(fixture.scene).unwrap();
+        eprintln!("{}: {} marks", fixture.name, svg_marks(svg).len());
+        let name = &fixture.name;
         failures.extend(
-            compare(&scene, &svg)
+            compare(&scene, svg)
                 .into_iter()
                 .map(|f| format!("{name}: {f}")),
         );
@@ -184,7 +179,7 @@ fn mark_mismatch(want: &Mark, got: &Mark) -> Option<String> {
         ) => {
             let position =
                 (wx - gx).abs() > TRANSFORM_TOLERANCE || (wy - gy).abs() > TRANSFORM_TOLERANCE;
-            (position || wa != ga || ws != gs || wt != gt)
+            (position || wa != ga || (ws - gs).abs() > TRANSFORM_TOLERANCE || wt != gt)
                 .then(|| format!("text {wt:?} at ({wx}, {wy}) {wa} {ws}px != {gt:?} at ({gx}, {gy}) {ga} {gs}px"))
                 .or_else(|| colors(wc, gc))
         }

@@ -67,6 +67,18 @@ pub struct Base {
     pub seed: i64,
     /// Deleted elements stay in the scene as tombstones.
     pub is_deleted: bool,
+    /// Labels and arrows attached to this element.
+    pub bound_elements: Option<Vec<BoundRef>>,
+}
+
+/// An element attached to another: its text label or a bound arrow.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct BoundRef {
+    /// Id of the attached element.
+    pub id: String,
+    /// `text` or `arrow`.
+    #[serde(rename = "type")]
+    pub kind: String,
 }
 
 /// Type-specific element data.
@@ -213,7 +225,38 @@ pub enum VerticalAlign {
     Other(String),
 }
 
+impl Default for Scene {
+    /// An empty scene, as Excalidraw starts one.
+    fn default() -> Self {
+        let json = serde_json::json!({
+            "type": "excalidraw",
+            "version": 2,
+            "source": "roughdraft",
+            "elements": [],
+            "appState": { "gridSize": 20, "viewBackgroundColor": "#ffffff" },
+            "files": {},
+        });
+        serde_json::from_value(json).expect("the empty scene is valid")
+    }
+}
+
 impl Scene {
+    /// Returns the scene as Excalidraw saves it: deleted elements dropped and
+    /// `lastCommittedPoint` cleared on lines and arrows (`serializeAsJSON`).
+    #[must_use]
+    pub fn saved(&self) -> Self {
+        let mut scene = self.clone();
+        scene.elements.retain(|e| !e.base.is_deleted);
+        for element in &mut scene.elements {
+            if element.json.contains_key("lastCommittedPoint") {
+                element
+                    .json
+                    .insert("lastCommittedPoint".into(), Value::Null);
+            }
+        }
+        scene
+    }
+
     /// Returns `appState.viewBackgroundColor`, white when unset.
     pub fn background_color(&self) -> &str {
         self.json
@@ -221,6 +264,71 @@ impl Scene {
             .and_then(|state| state.get("viewBackgroundColor"))
             .and_then(Value::as_str)
             .unwrap_or("#ffffff")
+    }
+}
+
+impl Element {
+    /// Marks the element as changed, like Excalidraw's `mutateElement`:
+    /// increments `version`, draws a new `versionNonce`, sets `updated` to now.
+    pub fn touch(&mut self) {
+        let version = self
+            .json
+            .get("version")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as i64);
+        self.json.insert("version".into(), (version + 1).into());
+        self.json
+            .insert("versionNonce".into(), crate::random::integer().into());
+        self.json.insert("updated".into(), now.into());
+    }
+
+    /// Returns `(version, versionNonce)`, which changes on every [`touch`].
+    ///
+    /// [`touch`]: Element::touch
+    pub fn revision(&self) -> (i64, i64) {
+        let get = |key| self.json.get(key).and_then(Value::as_i64).unwrap_or(0);
+        (get("version"), get("versionNonce"))
+    }
+
+    /// Returns a copy with a fresh `id` and `seed`, like Excalidraw's
+    /// `duplicateElement`; `index` is left for Excalidraw to assign. Callers
+    /// fix up references.
+    #[must_use]
+    pub fn duplicate(&self) -> Self {
+        let mut copy = self.clone();
+        copy.base.id = crate::random::id();
+        copy.base.seed = crate::random::integer();
+        if copy.json.contains_key("index") {
+            copy.json.insert("index".into(), Value::Null);
+        }
+        copy.touch();
+        copy
+    }
+
+    /// Drops references to `ids` (deleted elements): from `boundElements`,
+    /// and arrow `startBinding`/`endBinding`. Returns whether anything changed.
+    pub fn forget_bindings(&mut self, ids: &std::collections::HashSet<String>) -> bool {
+        let mut changed = false;
+        if let Some(bound) = &mut self.base.bound_elements {
+            let before = bound.len();
+            bound.retain(|b| !ids.contains(&b.id));
+            changed |= bound.len() != before;
+        }
+        for key in ["startBinding", "endBinding"] {
+            let target = self
+                .json
+                .get(key)
+                .and_then(|b| b.get("elementId"))
+                .and_then(Value::as_str);
+            if target.is_some_and(|id| ids.contains(id)) {
+                self.json.insert(key.into(), Value::Null);
+                changed = true;
+            }
+        }
+        changed
     }
 }
 
@@ -339,6 +447,28 @@ fn js_numbers(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{Arrowhead, Element, FillStyle, Kind, Scene};
+
+    #[test]
+    fn touch_and_duplicate_update_bookkeeping() {
+        let mut scene: Scene = serde_json::from_str(&scene()).unwrap();
+        let element = &mut scene.elements[0];
+        let before = element.revision();
+        element.touch();
+        assert_eq!(element.revision().0, before.0 + 1);
+        assert_ne!(element.revision().1, before.1);
+
+        let copy = element.duplicate();
+        assert_ne!(copy.base.id, element.base.id);
+        assert_ne!(copy.base.seed, element.base.seed);
+        assert_eq!(copy.revision().0, element.revision().0 + 1);
+        let json = serde_json::to_value(&copy).unwrap();
+        assert_eq!(json["id"], copy.base.id.as_str());
+        assert_eq!(
+            json["future"],
+            serde_json::json!({"k": [1, 2.5]}),
+            "unknown fields kept"
+        );
+    }
 
     const BASE: &str = r##""x":10,"y":20.5,"width":100,"height":50,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"groupIds":[],"frameId":null,"roundness":null,"seed":1968410193,"version":3,"versionNonce":7,"isDeleted":false,"boundElements":null,"updated":1727654400000,"link":null,"locked":false"##;
 

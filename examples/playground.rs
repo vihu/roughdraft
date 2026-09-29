@@ -1,30 +1,40 @@
-//! Playground: view an `.excalidraw` file or an exported Keeprs sketch memo.
+//! Playground: open, edit and save `.excalidraw` files (or view an exported
+//! Keeprs sketch memo).
 //!
 //! ```text
-//! cargo run --release --example playground -- <file>
+//! cargo run --release --example playground -- [file]
 //! cargo run --release --example playground -- <file> --snapshot out.png [--dark] [--origin x,y]
 //! ```
 //!
-//! Drag or scroll to pan, Ctrl+scroll to zoom, Alt+Shift+D toggles dark mode.
+//! Ctrl+O opens, Ctrl+S saves (Save As when the file is new or a Keeprs memo),
+//! Ctrl+Shift+S saves as, Alt+Shift+D toggles dark mode. The canvas follows
+//! Excalidraw's shortcuts: V selection, H hand, Space or middle-drag to pan,
+//! Ctrl+scroll to zoom, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z, arrows.
+//!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.
 //! `--origin` sets the scene point at the top-left, e.g. to line up with an
 //! Excalidraw SVG export (its first `translate`, negated).
+use std::path::PathBuf;
+
 use iced::keyboard::{self, key};
 use iced::widget::{center, text};
-use iced::{Element, Subscription};
+use iced::{Element, Subscription, Task};
 use roughdraft::scene::Scene;
-use roughdraft::widget::{Appearance, EXCALIFONT, Viewer};
+use roughdraft::widget::{self, Appearance, EXCALIFONT, Sketch};
 use serde_json::Value;
 
-const USAGE: &str = "usage: playground <file.excalidraw | keeprs-memo.json> [--snapshot out.png] [--dark] [--origin x,y]";
+const USAGE: &str = "usage: playground [file.excalidraw | keeprs-memo.json] [--snapshot out.png] [--dark] [--origin x,y]";
 
 /// Snapshot size in logical pixels.
 const SNAPSHOT_SIZE: (f32, f32) = (1024.0, 768.0);
 
 pub fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let file = args.first().filter(|a| !a.starts_with("--")).cloned();
+    let file = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .map(PathBuf::from);
     let snapshot = args
         .iter()
         .position(|a| a == "--snapshot")
@@ -47,15 +57,15 @@ pub fn main() -> iced::Result {
         let result = file
             .ok_or_else(|| USAGE.to_owned())
             .and_then(|f| load(&f))
-            .map(|scene| {
-                let mut viewer = Viewer::new(&scene);
-                viewer.set_appearance(appearance);
+            .and_then(|(scene, _)| {
+                let mut sketch = Sketch::new(scene);
+                sketch.set_appearance(appearance);
                 if let Some(origin) = origin {
-                    viewer.set_origin(origin);
+                    sketch.set_origin(origin);
                 }
-                write_snapshot(&viewer, png)
+                write_snapshot(&sketch, png)
             });
-        if let Err(error) = result.and_then(|written| written) {
+        if let Err(error) = result {
             eprintln!("{error}");
             std::process::exit(1);
         }
@@ -63,93 +73,168 @@ pub fn main() -> iced::Result {
     }
 
     iced::application(
-        move || Playground::open(file.as_deref(), appearance),
+        move || Playground::open(file.clone(), appearance),
         Playground::update,
         Playground::view,
     )
-    .title("roughdraft playground")
+    .title(Playground::title)
     .fonts([EXCALIFONT])
     .subscription(Playground::subscription)
     .run()
 }
 
 struct Playground {
-    viewer: Result<Viewer, String>,
+    /// Where Ctrl+S writes; `None` for a new scene or a Keeprs memo.
+    path: Option<PathBuf>,
+    sketch: Sketch,
+    error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
+    Sketch(widget::Message),
     ToggleAppearance,
+    Open,
+    Opened(Option<PathBuf>),
+    Save { choose: bool },
+    Saved(Result<PathBuf, String>),
 }
 
 impl Playground {
-    fn open(file: Option<&str>, appearance: Appearance) -> Self {
-        let viewer = file
-            .ok_or_else(|| USAGE.to_owned())
-            .and_then(load)
-            .map(|scene| {
-                let mut viewer = Viewer::new(&scene);
-                viewer.set_appearance(appearance);
-                viewer
-            });
-        Self { viewer }
-    }
-
-    fn update(&mut self, message: Message) {
-        match message {
-            Message::ToggleAppearance => {
-                if let Ok(viewer) = &mut self.viewer {
-                    viewer.set_appearance(match viewer.appearance() {
-                        Appearance::Light => Appearance::Dark,
-                        Appearance::Dark => Appearance::Light,
-                    });
-                }
-            }
+    fn open(file: Option<PathBuf>, appearance: Appearance) -> Self {
+        let (scene, path, error) = match file.as_deref().map(load) {
+            None => (Scene::default(), None, None),
+            Some(Ok((scene, writable))) => (scene, file.filter(|_| writable), None),
+            Some(Err(error)) => (Scene::default(), None, Some(error)),
+        };
+        let mut sketch = Sketch::new(scene);
+        sketch.set_appearance(appearance);
+        Self {
+            path,
+            sketch,
+            error,
         }
     }
 
+    fn title(&self) -> String {
+        let name = self
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+        format!(
+            "{} - roughdraft playground",
+            name.as_deref().unwrap_or("untitled")
+        )
+    }
+
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Sketch(message) => self.sketch.update(message),
+            Message::ToggleAppearance => {
+                self.sketch.set_appearance(match self.sketch.appearance() {
+                    Appearance::Light => Appearance::Dark,
+                    Appearance::Dark => Appearance::Light,
+                })
+            }
+            Message::Open => return Task::perform(pick_file(), Message::Opened),
+            Message::Opened(Some(path)) => *self = Self::open(Some(path), self.sketch.appearance()),
+            Message::Opened(None) => {}
+            Message::Save { choose } => {
+                let json = serde_json::to_string_pretty(&self.sketch.scene().saved())
+                    .expect("scenes serialize");
+                let path = self.path.clone().filter(|_| !choose);
+                return Task::perform(save_file(path, json), Message::Saved);
+            }
+            Message::Saved(Ok(path)) => {
+                self.error = None;
+                self.path = Some(path);
+            }
+            Message::Saved(Err(error)) => self.error = Some(error),
+        }
+        Task::none()
+    }
+
     fn view(&self) -> Element<'_, Message> {
-        match &self.viewer {
-            Ok(viewer) => viewer.view(),
-            Err(error) => center(text(error)).into(),
+        match &self.error {
+            // ponytail: errors replace the canvas; a toast when the toolbar lands (slice 4)
+            Some(error) => center(text(error)).into(),
+            None => self.sketch.view().map(Message::Sketch),
         }
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        keyboard::listen().filter_map(|event| match event {
-            keyboard::Event::KeyPressed {
-                physical_key: key::Physical::Code(key::Code::KeyD),
+        keyboard::listen().filter_map(|event| {
+            let keyboard::Event::KeyPressed {
+                physical_key: key::Physical::Code(code),
                 modifiers,
                 ..
-            } if modifiers.alt() && modifiers.shift() => Some(Message::ToggleAppearance),
-            _ => None,
+            } = event
+            else {
+                return None;
+            };
+            match code {
+                key::Code::KeyD if modifiers.alt() && modifiers.shift() => {
+                    Some(Message::ToggleAppearance)
+                }
+                key::Code::KeyO if modifiers.command() => Some(Message::Open),
+                key::Code::KeyS if modifiers.command() => Some(Message::Save {
+                    choose: modifiers.shift(),
+                }),
+                _ => None,
+            }
         })
     }
 }
 
 /// Reads a scene file, unwrapping a Keeprs sketch memo
 /// (`{"excalidraw": scene, "svg": ..., "savedInDarkMode": ...}`) if needed.
-fn load(path: &str) -> Result<Scene, String> {
-    let json = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let mut value: Value = serde_json::from_str(&json).map_err(|e| format!("{path}: {e}"))?;
+/// Also returns whether saving back to the same path keeps its format.
+fn load(path: &std::path::Path) -> Result<(Scene, bool), String> {
+    let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
+    let json = std::fs::read_to_string(path).map_err(|e| fail(&e))?;
+    let mut value: Value = serde_json::from_str(&json).map_err(|e| fail(&e))?;
+    let memo = value.get("excalidraw").is_some();
     if let Some(inner) = value.get_mut("excalidraw").map(Value::take) {
         value = match inner {
-            Value::String(nested) => {
-                serde_json::from_str(&nested).map_err(|e| format!("{path}: {e}"))?
-            }
+            Value::String(nested) => serde_json::from_str(&nested).map_err(|e| fail(&e))?,
             other => other,
         };
     }
-    serde_json::from_value(value).map_err(|e| format!("{path}: {e}"))
+    let scene = serde_json::from_value(value).map_err(|e| fail(&e))?;
+    Ok((scene, !memo))
 }
 
-fn write_snapshot(viewer: &Viewer, png: &str) -> Result<(), String> {
+async fn pick_file() -> Option<PathBuf> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("Excalidraw", &["excalidraw", "json"])
+        .pick_file()
+        .await?;
+    Some(file.path().to_owned())
+}
+
+async fn save_file(path: Option<PathBuf>, json: String) -> Result<PathBuf, String> {
+    let path = match path {
+        Some(path) => path,
+        None => rfd::AsyncFileDialog::new()
+            .add_filter("Excalidraw", &["excalidraw"])
+            .set_file_name("untitled.excalidraw")
+            .save_file()
+            .await
+            .ok_or("save cancelled")?
+            .path()
+            .to_owned(),
+    };
+    std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
+fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {
     let settings = iced::Settings {
         fonts: vec![EXCALIFONT.into()],
         ..iced::Settings::default()
     };
-    let mut simulator =
-        iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, viewer.view::<()>());
+    let mut simulator = iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, sketch.view());
     let snapshot = simulator
         .snapshot(&iced::Theme::Light)
         .map_err(|e| e.to_string())?;

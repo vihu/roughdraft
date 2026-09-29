@@ -6,7 +6,11 @@
 #![deny(unsafe_code, missing_docs, rustdoc::broken_intra_doc_links)]
 
 pub mod color;
+pub mod edit;
 pub mod geometry;
+pub mod history;
+pub mod hit;
+mod random;
 pub mod render;
 pub mod scene;
 pub mod widget;
