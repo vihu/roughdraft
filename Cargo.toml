@@ -1,0 +1,16 @@
+[package]
+description  = "Excalidraw-compatible hand-drawn sketch canvas for iced"
+edition      = "2024"
+name         = "roughdraft"
+publish      = false
+rust-version = "1.93"
+version      = "0.1.0"
+
+[dependencies]
+# Pinned iced master; bump only at milestone boundaries.
+iced       = { git = "https://github.com/iced-rs/iced", rev = "90dec30cc7368c3fbaac69790e43a4b08a21691d", features = ["canvas"] }
+# Exact pin: seed parity with rough.js 4.6.4 is guarded by tests/rough_parity.rs.
+rough-rs   = { version = "=0.1.0", default-features = false, features = ["svg_path"] }
+serde      = { version = "1", features = ["derive"] }
+# preserve_order keeps scene key order on save.
+serde_json = { version = "1", features = ["preserve_order"] }
