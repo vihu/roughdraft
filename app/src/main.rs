@@ -60,9 +60,24 @@ pub fn main() -> iced::Result {
         App::view,
     )
     .title(App::title)
+    .window(window())
     .fonts(roughdraft::fonts::ALL)
     .subscription(App::subscription)
     .run()
+}
+
+/// The window settings. On Linux the window carries the app id, which
+/// desktops match to `packaging/io.github.vihu.roughdraft.desktop` for the
+/// name and icon they show.
+fn window() -> iced::window::Settings {
+    iced::window::Settings {
+        #[cfg(target_os = "linux")]
+        platform_specific: iced::window::settings::PlatformSpecific {
+            application_id: "io.github.vihu.roughdraft".to_owned(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }
 
 struct App {

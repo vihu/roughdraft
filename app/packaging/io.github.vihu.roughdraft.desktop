@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=roughdraft
+GenericName=Sketch Editor
+Comment=Hand-drawn diagrams, compatible with Excalidraw
+Exec=roughdraft %f
+Icon=io.github.vihu.roughdraft
+Terminal=false
+Categories=Graphics;2DGraphics;VectorGraphics;
+Keywords=excalidraw;sketch;diagram;whiteboard;drawing;
+StartupWMClass=io.github.vihu.roughdraft
