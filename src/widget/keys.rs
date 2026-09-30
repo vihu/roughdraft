@@ -3,6 +3,23 @@ use iced::keyboard::{self, Key, key::Named};
 
 use crate::edit::{Command, Order, Tool};
 
+/// Shortcuts Excalidraw matches by key code, so they work whatever Alt
+/// makes of the letter: copy and paste styles.
+pub(super) fn code_shortcut(
+    code: keyboard::key::Code,
+    modifiers: keyboard::Modifiers,
+) -> Option<Command> {
+    use keyboard::key::Code;
+    if !(modifiers.command() && modifiers.alt()) {
+        return None;
+    }
+    match code {
+        Code::KeyC => Some(Command::CopyStyles),
+        Code::KeyV => Some(Command::PasteStyles),
+        _ => None,
+    }
+}
+
 /// Maps Excalidraw's shortcuts to editor commands.
 pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
     /// Arrow-key nudge in scene units: plain, and with Shift.
@@ -56,7 +73,26 @@ pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Comm
 mod tests {
     use iced::keyboard::{Key, Modifiers, key::Named};
 
-    use super::{Command, Tool, shortcut};
+    use super::{Command, Tool, code_shortcut, shortcut};
+
+    #[test]
+    fn style_copy_matches_the_key_code_with_ctrl_and_alt() {
+        use iced::keyboard::key::Code;
+        let ctrl_alt = Modifiers::CTRL | Modifiers::ALT;
+        assert_eq!(
+            code_shortcut(Code::KeyC, ctrl_alt),
+            Some(Command::CopyStyles)
+        );
+        assert_eq!(
+            code_shortcut(Code::KeyV, ctrl_alt),
+            Some(Command::PasteStyles)
+        );
+        assert_eq!(
+            code_shortcut(Code::KeyC, Modifiers::CTRL),
+            None,
+            "plain copy"
+        );
+    }
 
     #[test]
     fn shortcuts_follow_excalidraw() {

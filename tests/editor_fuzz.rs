@@ -89,6 +89,8 @@ fn session(seed: u64) {
             10 => editor.command(rng.pick(&[
                 Command::EditLine,
                 Command::EditLine,
+                Command::CopyStyles,
+                Command::PasteStyles,
                 Command::ToggleLock,
                 Command::Escape,
                 Command::Finish,

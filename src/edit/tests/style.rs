@@ -89,3 +89,29 @@ fn without_a_selection_only_new_elements_change() {
     assert_eq!(editor.scene(), &before);
     assert_eq!(editor.current_style().background_color, "#ffec99");
 }
+
+#[test]
+fn copied_styles_paste_onto_the_selection_with_fitting_roundness() {
+    let mut editor = editor();
+    let click = |editor: &mut crate::edit::Editor, at: [f64; 2]| {
+        drag(editor, at, at, Modifiers::default());
+    };
+    click(&mut editor, [50.0, 25.0]);
+    editor.apply_style(StyleChange::RoundEdges(true));
+    editor.apply_style(StyleChange::StrokeColor("#e03131".into()));
+    editor.command(Command::CopyStyles);
+
+    click(&mut editor, [150.0, 0.0]);
+    assert!(editor.is_selected("r"), "the arrow");
+    editor.command(Command::PasteStyles);
+    let arrow = &editor.scene().elements[3];
+    assert_eq!(arrow.base.stroke_color, "#e03131");
+    assert_eq!(arrow.base.background_color, "#a5d8ff");
+    assert_eq!(
+        arrow.base.roundness.as_ref().map(|r| r.kind),
+        Some(2),
+        "proportional for arrows"
+    );
+    editor.command(Command::Undo);
+    assert_eq!(editor.scene().elements[3].base.stroke_color, "#1e1e1e");
+}

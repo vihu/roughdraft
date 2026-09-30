@@ -51,6 +51,8 @@ pub struct Editor {
     /// binding highlight.
     hover: Option<Point>,
     line_edit: Option<line::LineEdit>,
+    /// Element and label whose style Ctrl+Alt+V applies.
+    copied_style: Option<(Element, Option<Element>)>,
 }
 
 /// What a pointer press on the canvas does.
@@ -136,6 +138,10 @@ pub enum Command {
     SmallerFont,
     /// Opens the line editor on the selected line or arrow (Ctrl+Enter).
     EditLine,
+    /// Remembers the first selected element's style (Ctrl+Alt+C).
+    CopyStyles,
+    /// Applies the remembered style to the selection (Ctrl+Alt+V).
+    PasteStyles,
 }
 
 #[derive(Debug)]
@@ -226,6 +232,7 @@ impl Editor {
             zoom: 1.0,
             hover: None,
             line_edit: None,
+            copied_style: None,
         }
     }
 
@@ -374,6 +381,8 @@ impl Editor {
             Command::Escape if self.line_edit.is_some() => self.line_edit = None,
             Command::Delete if self.line_edit.is_some() => self.delete_line_points(),
             Command::EditLine => self.enter_line_editor(),
+            Command::CopyStyles => self.copy_styles(),
+            Command::PasteStyles => self.paste_styles(),
             Command::Tool(tool) => {
                 self.tool = tool;
                 if tool != Tool::Selection {
