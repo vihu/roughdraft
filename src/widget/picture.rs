@@ -35,7 +35,7 @@ impl Sketch {
         let mime = format.to_mime_type();
         let url = format!("data:{mime};base64,{}", crate::base64::encode(bytes));
         let viewport = self.viewport.get();
-        let at = self.camera.scene_point(
+        let at = self.camera.get().scene_point(
             iced::Rectangle::with_size(viewport),
             iced::Point::new(viewport.width / 2.0, viewport.height / 2.0),
         );

@@ -7,6 +7,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
+use super::camera::ZoomKey;
 use super::{Appearance, Input, Message, Sketch};
 use crate::color::Rgba;
 use crate::edit::{Command, Style, StyleChange, Tool};
@@ -118,6 +119,40 @@ impl Sketch {
         let bar = container(bar).padding(4).style(panel_style);
         container(opaque(self.themed(bar)))
             .center_x(Length::Fill)
+            .padding(12)
+            .into()
+    }
+
+    /// Zoom and history buttons in the bottom-left corner, like Excalidraw's
+    /// footer: zoom out, the zoom level (click for 100%), zoom in; undo,
+    /// redo.
+    pub(super) fn footer(&self) -> Element<'_, Message> {
+        let flat = |label: String, message: Message| {
+            button(text(label).size(13))
+                .padding([3, 10])
+                .style(button::text)
+                .on_press(message)
+        };
+        let zoom = |key: ZoomKey| Message(Input::ZoomKey(key));
+        let command = |command: Command| Message(Input::Command(command));
+        let percent = format!("{:.0}%", self.camera.get().zoom * 100.0);
+        let zoom_group = row![
+            flat("-".into(), zoom(ZoomKey::Out)),
+            flat(percent, zoom(ZoomKey::Reset)),
+            flat("+".into(), zoom(ZoomKey::In)),
+        ]
+        .align_y(Alignment::Center);
+        let history = row![
+            flat("Undo".into(), command(Command::Undo)),
+            flat("Redo".into(), command(Command::Redo)),
+        ];
+        let bar = row![
+            container(zoom_group).padding(2).style(panel_style),
+            container(history).padding(2).style(panel_style),
+        ]
+        .spacing(8);
+        container(opaque(self.themed(bar)))
+            .align_bottom(Length::Fill)
             .padding(12)
             .into()
     }

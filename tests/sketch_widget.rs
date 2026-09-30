@@ -183,3 +183,36 @@ fn typing_a_hex_colour_restyles_the_selection() {
     assert!(sketch.editor().is_selected("box"));
     assert_eq!(sketch.scene().elements[0].base.stroke_color, "#e03131");
 }
+
+#[test]
+fn footer_zooms_and_undoes() {
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    run(&mut sketch, |ui| {
+        ui.click("+").expect("zoom in");
+    });
+    assert!((sketch.zoom() - 1.1).abs() < 1e-9);
+    run(&mut sketch, |ui| {
+        ui.click("110%").expect("the level resets");
+    });
+    assert_eq!(sketch.zoom(), 1.0);
+
+    sketch.set_origin([0.0, 0.0]);
+    run(&mut sketch, |ui| {
+        let at = Point::new(480.0, 345.0);
+        ui.point_at(at);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    });
+    let moved = sketch.scene().elements[0].base.x;
+    run(&mut sketch, |ui| {
+        ui.tap_key(iced::keyboard::Key::Named(
+            iced::keyboard::key::Named::ArrowRight,
+        ));
+    });
+    assert_eq!(sketch.scene().elements[0].base.x, moved + 1.0);
+    run(&mut sketch, |ui| {
+        ui.click("Undo").expect("undo button");
+    });
+    assert_eq!(sketch.scene().elements[0].base.x, moved);
+}

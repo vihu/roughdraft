@@ -51,7 +51,10 @@ pub struct Sketch {
     above: canvas::Cache,
     background: Rgba,
     appearance: Appearance,
-    camera: Camera,
+    camera: std::cell::Cell<Camera>,
+    /// Centre the content at the first draw, once the view size is known
+    /// (Excalidraw's `scrollToContent`), unless the host placed the camera.
+    unplaced: std::cell::Cell<bool>,
     /// What the text overlay edits, and the id of the element it belongs to.
     content: text_editor::Content,
     editing: Option<String>,
@@ -135,10 +138,11 @@ impl Sketch {
             above: canvas::Cache::new(),
             background,
             appearance: Appearance::Light,
-            camera: Camera {
+            camera: std::cell::Cell::new(Camera {
                 origin: [0.0, 0.0],
                 zoom: 1.0,
-            },
+            }),
+            unplaced: std::cell::Cell::new(true),
             content: text_editor::Content::new(),
             editing: None,
             images: HashMap::new(),
@@ -146,7 +150,8 @@ impl Sketch {
             color_draft: None,
         };
         sketch.refresh();
-        sketch.camera.origin = content_origin(sketch.drawings());
+        let origin = content_origin(sketch.drawings());
+        sketch.camera.set(Camera { origin, zoom: 1.0 });
         sketch
     }
 
@@ -185,14 +190,18 @@ impl Sketch {
                 Task::none()
             }
             Input::Pan([dx, dy]) => {
-                let [x, y] = self.camera.origin;
-                self.camera.origin = [x - dx / self.camera.zoom, y - dy / self.camera.zoom];
+                let mut camera = self.camera.get();
+                let [x, y] = camera.origin;
+                camera.origin = [x - dx / camera.zoom, y - dy / camera.zoom];
+                self.camera.set(camera);
                 self.clear_caches();
                 return Task::none();
             }
             Input::Zoom { factor, cursor } => {
-                self.camera.zoom_about(self.camera.zoom * factor, cursor);
-                self.editor.set_zoom(self.camera.zoom);
+                let mut camera = self.camera.get();
+                camera.zoom_about(camera.zoom * factor, cursor);
+                self.camera.set(camera);
+                self.editor.set_zoom(camera.zoom);
                 self.clear_caches();
                 return Task::none();
             }
@@ -213,8 +222,10 @@ impl Sketch {
                 };
                 let bounds =
                     (!targets.is_empty()).then(|| edit::common_bounds(targets.into_iter()));
-                self.camera.apply(key, viewport, bounds);
-                self.editor.set_zoom(self.camera.zoom);
+                let mut camera = self.camera.get();
+                camera.apply(key, viewport, bounds);
+                self.camera.set(camera);
+                self.editor.set_zoom(camera.zoom);
                 self.clear_caches();
                 return Task::none();
             }
@@ -287,6 +298,11 @@ impl Sketch {
         task.chain(self.sync_text_overlay())
     }
 
+    /// Returns the canvas zoom (1 is 100%).
+    pub fn zoom(&self) -> f64 {
+        self.camera.get().zoom
+    }
+
     /// Returns the current color scheme.
     pub fn appearance(&self) -> Appearance {
         self.appearance
@@ -298,17 +314,19 @@ impl Sketch {
         self.clear_caches();
     }
 
-    /// Sets the scene point shown at the canvas' top-left corner on open.
+    /// Sets the scene point shown at the canvas' top-left corner.
     ///
-    /// Defaults to the content's top-left minus a small padding.
+    /// By default the first draw centres the content in the view.
     pub fn set_origin(&mut self, origin: [f64; 2]) {
-        self.camera.origin = origin;
+        let zoom = self.camera.get().zoom;
+        self.camera.set(Camera { origin, zoom });
+        self.unplaced.set(false);
         self.clear_caches();
     }
 
     /// Returns the editor: canvas with the tool bar and style panel over it.
     pub fn view(&self) -> Element<'_, Message> {
-        let mut layers = vec![self.canvas(), self.toolbar()];
+        let mut layers = vec![self.canvas(), self.toolbar(), self.footer()];
         layers.extend(self.style_panel());
         iced::widget::Stack::with_children(layers).into()
     }
@@ -391,6 +409,27 @@ impl Sketch {
             .filter_map(|id| self.drawings[id].drawing.as_ref())
     }
 
+    /// Centres the live elements in a view of `size` at the camera's zoom.
+    fn centre_content(&self, size: iced::Size) {
+        let live: Vec<&crate::scene::Element> = self
+            .editor
+            .scene()
+            .elements
+            .iter()
+            .filter(|e| !e.base.is_deleted)
+            .collect();
+        if live.is_empty() {
+            return;
+        }
+        let [x1, y1, x2, y2] = edit::common_bounds(live.into_iter());
+        let mut camera = self.camera.get();
+        camera.origin = [
+            (x1 + x2) / 2.0 - f64::from(size.width) / 2.0 / camera.zoom,
+            (y1 + y2) / 2.0 - f64::from(size.height) / 2.0 / camera.zoom,
+        ];
+        self.camera.set(camera);
+    }
+
     fn clear_caches(&self) {
         self.below.clear();
         self.above.clear();
@@ -406,11 +445,12 @@ impl Sketch {
 
     fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
         // Only what is in view, like Excalidraw's `getVisibleCanvasElements`.
-        let [ox, oy] = self.camera.origin;
+        let camera = self.camera.get();
+        let [ox, oy] = camera.origin;
         let size = frame.size();
         let (x2, y2) = (
-            ox + f64::from(size.width) / self.camera.zoom,
-            oy + f64::from(size.height) / self.camera.zoom,
+            ox + f64::from(size.width) / camera.zoom,
+            oy + f64::from(size.height) / camera.zoom,
         );
         let visible = |[a, b, c, d]: Bounds| a <= x2 && b <= y2 && c >= ox && d >= oy;
         // The element being typed is shown by the text overlay instead.

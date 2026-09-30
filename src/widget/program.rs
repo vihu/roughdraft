@@ -50,7 +50,7 @@ impl canvas::Program<Message> for Sketch {
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         let publish = |input| Some(canvas::Action::publish(Message(input)).and_capture());
-        let camera = &self.camera;
+        let camera = self.camera.get();
         let typing = self.editor.editing().is_some();
         match event {
             Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
@@ -197,8 +197,11 @@ impl canvas::Program<Message> for Sketch {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
-        let view = self.camera.view();
         let size = bounds.size();
+        if self.unplaced.replace(false) {
+            self.centre_content(size);
+        }
+        let view = self.camera.get().view();
         self.viewport.set(size);
         let active: HashSet<&str> = self.active.iter().map(String::as_str).collect();
         let first = self
@@ -228,7 +231,7 @@ impl canvas::Program<Message> for Sketch {
             .above
             .draw(renderer, size, |frame| self.draw_ids(frame, above, view));
         let mut overlay = Frame::new(renderer, size);
-        self.draw_overlay(&mut overlay, self.camera.zoom, view);
+        self.draw_overlay(&mut overlay, self.camera.get().zoom, view);
         vec![
             below,
             dynamic.into_geometry(),
@@ -257,7 +260,7 @@ impl canvas::Program<Message> for Sketch {
             Tool::Text => return mouse::Interaction::Text,
             _ => return mouse::Interaction::Crosshair,
         }
-        let at = self.camera.scene_point(bounds, position);
+        let at = self.camera.get().scene_point(bounds, position);
         if let Some(handle) = self.editor.handle_at(at) {
             return match handle {
                 Handle::N | Handle::S => mouse::Interaction::ResizingVertically,

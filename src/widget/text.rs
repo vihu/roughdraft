@@ -76,7 +76,7 @@ impl Sketch {
         let Kind::Text(text) = &element.kind else {
             return None;
         };
-        let zoom = self.camera.zoom;
+        let zoom = self.camera.get().zoom;
         let size = text.font_size * zoom;
         let container = container_id(element)
             .and_then(|id| self.scene().elements.iter().find(|e| e.base.id == id));
@@ -93,7 +93,7 @@ impl Sketch {
                 Wrapping::None,
             ),
         };
-        let [x, y] = self.camera.view().apply([x, element.base.y]);
+        let [x, y] = self.camera.get().view().apply([x, element.base.y]);
         let color = self.paint(Rgba::parse(&element.base.stroke_color).unwrap_or(Rgba::BLACK));
         let selection = self.paint(Rgba {
             a: 0.3,

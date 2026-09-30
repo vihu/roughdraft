@@ -33,8 +33,9 @@
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.
-//! `--origin` sets the scene point at the top-left, e.g. to line up with an
-//! Excalidraw SVG export (its first `translate`, negated).
+//! The content is centred, as when a file opens; `--origin` sets the scene
+//! point at the top-left instead, e.g. to line up with an Excalidraw SVG
+//! export (its first `translate`, negated).
 use std::path::PathBuf;
 
 use iced::keyboard::{self, key};
