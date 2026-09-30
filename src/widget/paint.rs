@@ -97,7 +97,7 @@ fn draw_text(
 
 /// Maps an Excalidraw font id to a font iced can load.
 // ponytail: only Excalifont is bundled; add Virgil, Cascadia, Nunito, ... when a fixture needs them
-fn font(family: u32) -> Font {
+pub(super) fn font(family: u32) -> Font {
     match family {
         3 => Font::MONOSPACE,
         2 | 6 | 9 => Font::DEFAULT,

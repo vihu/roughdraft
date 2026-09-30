@@ -43,16 +43,15 @@ impl Editor {
 
     /// Pastes Excalidraw clipboard (or scene) JSON with its box centred on
     /// `at`. Copies get new ids and seeds, go on top, and become the
-    /// selection. Returns `false` when `text` holds no elements.
+    /// selection. Other text becomes a text element centred on `at`.
+    /// Returns `false` when there is nothing to paste.
     pub fn paste(&mut self, text: &str, at: Point) -> bool {
-        let Ok(value) = serde_json::from_str::<Value>(text.trim()) else {
-            return false;
-        };
+        let value = serde_json::from_str::<Value>(text.trim()).unwrap_or_default();
         if !value["type"]
             .as_str()
             .is_some_and(|t| PASTEABLE_TYPES.contains(&t))
         {
-            return false;
+            return self.paste_text(text, at);
         }
         let mut elements: Vec<Element> = value["elements"]
             .as_array()

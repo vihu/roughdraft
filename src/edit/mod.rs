@@ -9,11 +9,13 @@ mod create;
 mod resize;
 mod select;
 mod style;
+mod text;
 mod transform;
 
 use std::collections::HashSet;
 
 pub use self::style::Style;
+pub use self::text::{ApproxMeasure, Measure};
 pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
 use crate::geometry::{self, Bounds, Point};
 use crate::history::History;
@@ -30,6 +32,8 @@ pub struct Editor {
     style: Style,
     gesture: Option<Gesture>,
     multi: Option<Multi>,
+    text: Option<text::TextEdit>,
+    measure: Box<dyn Measure>,
     history: History,
     zoom: f64,
 }
@@ -52,6 +56,8 @@ pub enum Tool {
     Arrow,
     /// Drag, or click point by point, to draw a line.
     Line,
+    /// Click to type text; on a shape, its label.
+    Text,
 }
 
 /// Modifier keys held during a pointer event.
@@ -88,7 +94,8 @@ pub enum Command {
     ToggleLock,
     /// Finishes what is being drawn and returns to the selection tool.
     Escape,
-    /// Finishes a multi-point line or arrow (Enter).
+    /// Enter: finishes a multi-point line or arrow, or starts editing the
+    /// selected text or shape label.
     Finish,
     /// Deletes the selection and its labels.
     Delete,
@@ -176,6 +183,8 @@ impl Editor {
             style: Style::default(),
             gesture: None,
             multi: None,
+            text: None,
+            measure: Box::new(ApproxMeasure),
             history: History::default(),
             zoom: 1.0,
         }
@@ -199,6 +208,11 @@ impl Editor {
     /// Returns the style for new elements.
     pub fn style(&self) -> &Style {
         &self.style
+    }
+
+    /// Sets the style for new elements.
+    pub fn set_style(&mut self, style: Style) {
+        self.style = style;
     }
 
     /// Returns whether the element is selected.
@@ -226,6 +240,12 @@ impl Editor {
     /// current gesture, so the widget can keep the rest cached.
     pub fn active(&self) -> Vec<&str> {
         let id = |i: usize| self.scene.elements[i].base.id.as_str();
+        if let Some(edit) = &self.text {
+            let label = &self.scene.elements[edit.index];
+            return std::iter::once(label.base.id.as_str())
+                .chain(container_id(label))
+                .collect();
+        }
         match (&self.gesture, &self.multi) {
             (_, Some(multi)) => vec![id(multi.index)],
             (
@@ -270,11 +290,16 @@ impl Editor {
     /// Handles a primary-button pointer event at a scene point.
     pub fn pointer(&mut self, pointer: Pointer, at: Point, modifiers: Modifiers) {
         match pointer {
-            Pointer::Down => match self.tool {
-                Tool::Selection => self.select_press(at, modifiers),
-                Tool::Hand => {}
-                _ => self.create_press(at, modifiers),
-            },
+            Pointer::Down => {
+                // A click anywhere ends text editing first.
+                self.finish_text();
+                match self.tool {
+                    Tool::Selection => self.select_press(at, modifiers),
+                    Tool::Hand => {}
+                    Tool::Text => self.text_press(at),
+                    _ => self.create_press(at, modifiers),
+                }
+            }
             Pointer::Move | Pointer::Hover if self.multi.is_some() => {
                 self.multi_hover(at, modifiers)
             }
@@ -295,6 +320,8 @@ impl Editor {
     /// Runs a keyboard command. Any command first finishes a multi-point
     /// line or arrow in progress.
     pub fn command(&mut self, command: Command) {
+        self.finish_text();
+        let drawing = self.multi.is_some();
         self.finish_multi();
         match command {
             Command::Tool(tool) => {
@@ -310,7 +337,16 @@ impl Editor {
                 }
             }
             Command::Escape => self.tool = Tool::Selection,
-            Command::Finish => {}
+            Command::Finish if drawing => {}
+            Command::Finish => {
+                let selected: Vec<(String, Point)> = self
+                    .selection()
+                    .map(|e| (e.base.id.clone(), [e.base.x, e.base.y]))
+                    .collect();
+                if let [(id, at)] = &selected[..] {
+                    self.edit_element(id, *at);
+                }
+            }
             Command::Delete => self.delete(),
             Command::Duplicate => self.duplicate(),
             Command::SelectAll => {

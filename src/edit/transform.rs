@@ -73,7 +73,7 @@ pub(super) struct Frame {
 impl Editor {
     /// Returns the handles for the current selection, if it has any.
     pub fn handles(&self) -> Option<Handles> {
-        if !matches!(self.gesture, None | Some(Gesture::Resize { .. })) {
+        if self.text.is_some() || !matches!(self.gesture, None | Some(Gesture::Resize { .. })) {
             return None;
         }
         if let Some(points) = self.endpoints() {

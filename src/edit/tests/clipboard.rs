@@ -65,10 +65,23 @@ fn pasted_arrow_without_its_shape_is_unbound_and_cut_deletes() {
 #[test]
 fn paste_accepts_scene_files_and_refuses_other_text() {
     let mut editor = editor();
-    assert!(!editor.paste("hello", [0.0, 0.0]));
-    assert!(!editor.paste(r#"{"type":"other","elements":[]}"#, [0.0, 0.0]));
+    assert!(!editor.paste("  ", [0.0, 0.0]));
+    // JSON that is not Excalidraw's pastes as text, like any other text.
+    assert!(editor.paste(r#"{"type":"other"}"#, [0.0, 0.0]));
+    assert!(matches!(editor.scene().elements[4].kind, Kind::Text(_)));
     let scene = std::fs::read_to_string("tests/fixtures/scenes/l0-coverage.excalidraw").unwrap();
     assert!(editor.paste(&scene, [0.0, 0.0]));
-    assert_eq!(editor.scene().elements.len(), 4 + 21);
+    assert_eq!(editor.scene().elements.len(), 5 + 21);
     assert_eq!(editor.selection().count(), 20, "21 minus the label");
+}
+
+#[test]
+fn plain_text_pastes_as_a_centred_text_element() {
+    let mut editor = editor();
+    assert!(editor.paste("hello", [100.0, 100.0]));
+    let text = editor.scene().elements.last().unwrap();
+    // ApproxMeasure: 5 chars * 11 = 55 wide, 25 tall.
+    assert_eq!((text.base.x, text.base.y), (72.5, 87.5));
+    assert!(editor.is_selected(&text.base.id));
+    assert!(editor.editing().is_none());
 }

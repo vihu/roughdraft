@@ -10,7 +10,9 @@
 //! Ctrl+Shift+S saves as, Alt+Shift+D toggles dark mode. The canvas follows
 //! Excalidraw's shortcuts: V selection, H hand, R rectangle, D diamond,
 //! O ellipse, A arrow, L line (drag, or click point by point and finish with
-//! Enter, Escape or a second click), Q keeps the tool, Space or middle-drag
+//! Enter, Escape or a second click), T text (click a shape to label it;
+//! double-click or Enter edits text; Escape or Ctrl+Enter finishes), Q keeps
+//! the tool, Space or middle-drag
 //! pans, Ctrl+scroll zooms, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
 //! arrow keys nudge. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
 //! format, so shapes paste between this and excalidraw.com.

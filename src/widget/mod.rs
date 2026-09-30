@@ -3,13 +3,16 @@
 //! Embed it the usual iced way: keep a [`Sketch`] in your state, show
 //! [`Sketch::view`] mapped to your message type, and pass its messages back
 //! to [`Sketch::update`].
+mod overlay;
 mod paint;
 mod program;
+mod text;
 
 use std::collections::HashMap;
 
 use iced::keyboard::{self, Key, key::Named};
-use iced::widget::canvas::{self, Canvas, Frame, LineDash, Path, Stroke, Style};
+use iced::widget::canvas::{self, Canvas, Frame};
+use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
 use crate::color::Rgba;
@@ -49,7 +52,17 @@ pub struct Sketch {
     above: canvas::Cache,
     background: Rgba,
     appearance: Appearance,
-    content_origin: [f64; 2],
+    camera: Camera,
+    /// What the text overlay edits, and the id of the element it belongs to.
+    content: text_editor::Content,
+    editing: Option<String>,
+}
+
+/// Pan and zoom: the scene point at the canvas' top-left, and the scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Camera {
+    origin: [f64; 2],
+    zoom: f64,
 }
 
 /// Input for a [`Sketch`], produced by its view.
@@ -59,14 +72,28 @@ pub struct Message(Input);
 #[derive(Clone, Debug)]
 enum Input {
     Pointer(Pointer, geometry::Point, edit::Modifiers),
+    DoubleClick(geometry::Point),
     Command(Command),
-    Zoom(f64),
+    /// Pan by screen pixels.
+    Pan([f64; 2]),
+    /// Zoom by a factor, keeping the scene point under `cursor` (canvas
+    /// pixels) in place.
+    Zoom {
+        factor: f64,
+        cursor: [f64; 2],
+    },
+    /// An edit in the text overlay.
+    Text(text_editor::Action),
+    FinishText,
     Copy,
     Cut,
     /// Paste centred on a scene point.
     Paste(geometry::Point),
     Pasted(geometry::Point, Option<String>),
 }
+
+/// Excalidraw's zoom limits.
+const ZOOM: std::ops::RangeInclusive<f64> = 0.1..=30.0;
 
 /// Gap between the content and the canvas edge on open, like Excalidraw's
 /// SVG export padding.
@@ -80,8 +107,11 @@ impl Sketch {
     /// Starts editing `scene`.
     pub fn new(scene: Scene) -> Self {
         let background = Rgba::parse(scene.background_color()).unwrap_or(Rgba::WHITE);
+        text::load_fonts();
+        let mut editor = Editor::new(scene);
+        editor.set_measure(Box::new(text::CosmicMeasure));
         let mut sketch = Self {
-            editor: Editor::new(scene),
+            editor,
             drawings: HashMap::new(),
             order: Vec::new(),
             active: Vec::new(),
@@ -89,10 +119,15 @@ impl Sketch {
             above: canvas::Cache::new(),
             background,
             appearance: Appearance::Light,
-            content_origin: [0.0, 0.0],
+            camera: Camera {
+                origin: [0.0, 0.0],
+                zoom: 1.0,
+            },
+            content: text_editor::Content::new(),
+            editing: None,
         };
         sketch.refresh();
-        sketch.content_origin = content_origin(sketch.drawings());
+        sketch.camera.origin = content_origin(sketch.drawings());
         sketch
     }
 
@@ -116,13 +151,39 @@ impl Sketch {
                 self.editor.pointer(pointer, at, modifiers);
                 Task::none()
             }
+            Input::DoubleClick(at) => {
+                self.editor.double_click(at);
+                Task::none()
+            }
             Input::Command(command) => {
                 self.editor.command(command);
                 Task::none()
             }
-            Input::Zoom(zoom) => {
-                self.editor.set_zoom(zoom);
+            Input::Pan([dx, dy]) => {
+                let [x, y] = self.camera.origin;
+                self.camera.origin = [x - dx / self.camera.zoom, y - dy / self.camera.zoom];
+                self.clear_caches();
                 return Task::none();
+            }
+            Input::Zoom { factor, cursor } => {
+                let zoom = (self.camera.zoom * factor).clamp(*ZOOM.start(), *ZOOM.end());
+                self.camera.origin = zoom_at(self.camera.origin, self.camera.zoom, zoom, cursor);
+                self.camera.zoom = zoom;
+                self.editor.set_zoom(zoom);
+                self.clear_caches();
+                return Task::none();
+            }
+            Input::Text(action) => {
+                let edit = action.is_edit();
+                self.content.perform(action);
+                if edit {
+                    self.editor.set_text(&self.content.text());
+                }
+                Task::none()
+            }
+            Input::FinishText => {
+                self.editor.finish_text();
+                Task::none()
             }
             Input::Copy => write_clipboard(self.editor.copy()),
             Input::Cut => write_clipboard(self.editor.cut()),
@@ -138,7 +199,7 @@ impl Sketch {
             }
         };
         self.refresh();
-        task
+        task.chain(self.sync_text_overlay())
     }
 
     /// Returns the current color scheme.
@@ -156,16 +217,17 @@ impl Sketch {
     ///
     /// Defaults to the content's top-left minus a small padding.
     pub fn set_origin(&mut self, origin: [f64; 2]) {
-        self.content_origin = origin;
+        self.camera.origin = origin;
         self.clear_caches();
     }
 
     /// Returns the canvas widget, filling the available space.
     pub fn view(&self) -> Element<'_, Message> {
-        Canvas::new(self)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        let canvas = Canvas::new(self).width(Length::Fill).height(Length::Fill);
+        match self.text_overlay() {
+            Some(overlay) => stack![canvas, overlay].into(),
+            None => canvas.into(),
+        }
     }
 }
 
@@ -224,120 +286,38 @@ impl Sketch {
     }
 
     fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
-        for drawing in ids.iter().filter_map(|id| self.drawings[id].1.as_ref()) {
+        // The element being typed is shown by the text overlay instead.
+        let shown = ids.iter().filter(|id| self.editing.as_ref() != Some(*id));
+        for drawing in shown.filter_map(|id| self.drawings[id].1.as_ref()) {
             let transform = drawing.transform.then(view);
             for item in &drawing.items {
                 paint::draw_item(frame, item, transform, &|c| self.paint(c));
             }
         }
     }
+}
 
-    /// Corner handles as white squares, the rotation knob as a circle, and
-    /// line endpoints as circles, all at a fixed screen size.
-    fn draw_handles(&self, frame: &mut Frame, handles: &edit::Handles, view: Affine, color: Color) {
-        let white = self.paint(Rgba::WHITE);
-        let stroke = Stroke {
-            style: Style::Solid(color),
-            width: 1.0,
-            ..Stroke::default()
-        };
-        let half = edit::HANDLE_SIZE / 2.0;
-        let rotation = Affine::rotate_about(handles.angle, [0.0, 0.0]);
-        for (handle, center) in &handles.handles {
-            let [cx, cy] = view.apply(*center);
-            let path = if *handle == edit::Handle::Rotation {
-                Path::circle(iced::Point::new(cx as f32, cy as f32), half as f32)
-            } else {
-                let corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
-                polygon(&corners, rotation.then(Affine::translate([cx, cy])))
-            };
-            frame.fill(&path, white);
-            frame.stroke(&path, stroke);
-        }
-        let point_stroke = self.paint(Rgba::rgb(
-            0x5e as f32 / 255.0,
-            0x5a as f32 / 255.0,
-            0xd8 as f32 / 255.0,
-        ));
-        for point in &handles.points {
-            let [x, y] = view.apply(*point);
-            let circle = Path::circle(
-                iced::Point::new(x as f32, y as f32),
-                edit::POINT_RADIUS as f32,
-            );
-            frame.fill(&circle, Color { a: 0.9, ..white });
-            frame.stroke(
-                &circle,
-                Stroke {
-                    style: Style::Solid(point_stroke),
-                    ..stroke
-                },
-            );
-        }
+impl Camera {
+    fn view(&self) -> Affine {
+        let [x, y] = self.origin;
+        Affine::translate([-x, -y]).then(Affine::scale(self.zoom))
     }
 
-    fn draw_overlay(&self, frame: &mut Frame, zoom: f64, view: Affine) {
-        let (selection, dark_selection) = (
-            Rgba::rgb(0.412, 0.396, 0.859),
-            Rgba::rgb(0.208, 0.188, 0.769),
-        );
-        let color = self.paint(match self.appearance {
-            Appearance::Light => selection,
-            Appearance::Dark => dark_selection,
-        });
-        let line = |dash: &'static [f32]| Stroke {
-            style: Style::Solid(color),
-            width: 1.0,
-            line_dash: LineDash {
-                segments: dash,
-                offset: 0,
-            },
-            ..Stroke::default()
-        };
-        let pad = SELECTION_PADDING / zoom;
-
-        let selected: Vec<_> = self.editor.selection().collect();
-        let handles = self.editor.handles();
-        // A lone 2-point line shows only its endpoint handles, no border.
-        let bordered = !handles.as_ref().is_some_and(|h| !h.points.is_empty());
-        for element in selected.iter().filter(|_| bordered) {
-            let [x1, y1, x2, y2] = geometry::local_bounds(element);
-            let corners = [
-                [x1 - pad, y1 - pad],
-                [x2 + pad, y1 - pad],
-                [x2 + pad, y2 + pad],
-                [x1 - pad, y2 + pad],
-            ];
-            let transform = geometry::element_transform(element).then(view);
-            frame.stroke(&polygon(&corners, transform), line(&[]));
-        }
-        if selected.len() > 1 {
-            let [x1, y1, x2, y2] = edit::common_bounds(selected.into_iter());
-            let corners = [
-                [x1 - pad, y1 - pad],
-                [x2 + pad, y1 - pad],
-                [x2 + pad, y2 + pad],
-                [x1 - pad, y2 + pad],
-            ];
-            frame.stroke(&polygon(&corners, view), line(&[2.0, 2.0]));
-        }
-        if let Some(handles) = &handles {
-            self.draw_handles(frame, handles, view, color);
-        }
-        if let Some([x1, y1, x2, y2]) = self.editor.marquee() {
-            let marquee = polygon(&[[x1, y1], [x2, y1], [x2, y2], [x1, y2]], view);
-            frame.fill(
-                &marquee,
-                self.paint(Rgba {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 200.0 / 255.0,
-                    a: 0.04,
-                }),
-            );
-            frame.stroke(&marquee, line(&[]));
-        }
+    /// Scene point under a window position.
+    fn scene_point(&self, bounds: iced::Rectangle, position: iced::Point) -> geometry::Point {
+        let [x, y] = self.origin;
+        [
+            x + f64::from(position.x - bounds.x) / self.zoom,
+            y + f64::from(position.y - bounds.y) / self.zoom,
+        ]
     }
+}
+
+/// Returns the origin that keeps the scene point under `cursor` (canvas
+/// pixels) fixed while zooming from `from` to `to`.
+fn zoom_at(origin: [f64; 2], from: f64, to: f64, cursor: [f64; 2]) -> [f64; 2] {
+    let anchor = [origin[0] + cursor[0] / from, origin[1] + cursor[1] / from];
+    [anchor[0] - cursor[0] / to, anchor[1] - cursor[1] / to]
 }
 
 fn write_clipboard(json: Option<String>) -> Task<Message> {
@@ -374,27 +354,12 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
             ("o" | "4", _) => Some(Command::Tool(Tool::Ellipse)),
             ("a" | "5", _) => Some(Command::Tool(Tool::Arrow)),
             ("l" | "6", _) => Some(Command::Tool(Tool::Line)),
+            ("t" | "8", _) => Some(Command::Tool(Tool::Text)),
             ("q", _) => Some(Command::ToggleLock),
             _ => None,
         },
         _ => None,
     }
-}
-
-fn polygon(corners: &[geometry::Point], transform: Affine) -> Path {
-    let segments: Vec<Segment> = corners
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            if i == 0 {
-                Segment::MoveTo(*p)
-            } else {
-                Segment::LineTo(*p)
-            }
-        })
-        .chain(std::iter::once(Segment::LineTo(corners[0])))
-        .collect();
-    paint::to_path(&segments, transform)
 }
 
 /// Top-left of everything drawn, minus [`PADDING`], so a scene opens at 100%
@@ -428,7 +393,18 @@ fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, Tool, shortcut};
+    use super::{Command, Tool, shortcut, zoom_at};
+
+    #[test]
+    fn zoom_keeps_point_under_cursor() {
+        let (origin, cursor) = ([-10.0, 40.0], [300.0, 200.0]);
+        let under = |origin: [f64; 2], zoom: f64| {
+            [origin[0] + cursor[0] / zoom, origin[1] + cursor[1] / zoom]
+        };
+        let zoomed = zoom_at(origin, 1.0, 2.5, cursor);
+        assert_eq!(under(zoomed, 2.5), under(origin, 1.0));
+        assert_eq!(zoom_at(origin, 2.0, 2.0, cursor), origin);
+    }
     use iced::keyboard::{Key, Modifiers, key::Named};
 
     #[test]

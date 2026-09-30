@@ -283,6 +283,24 @@ impl Element {
         self.json.insert("updated".into(), now.into());
     }
 
+    /// Returns a text element's unwrapped text (`originalText`), or its
+    /// displayed text, or `""` for other elements.
+    pub fn original_text(&self) -> &str {
+        match (
+            &self.kind,
+            self.json.get("originalText").and_then(Value::as_str),
+        ) {
+            (Kind::Text(_), Some(original)) => original,
+            (Kind::Text(text), None) => &text.text,
+            _ => "",
+        }
+    }
+
+    /// Returns the element's full JSON object, for fields not typed here.
+    pub(crate) fn json_mut(&mut self) -> &mut Map<String, Value> {
+        &mut self.json
+    }
+
     /// Returns `(version, versionNonce)`, which changes on every [`touch`].
     ///
     /// [`touch`]: Element::touch
