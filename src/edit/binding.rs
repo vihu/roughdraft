@@ -13,7 +13,7 @@ use self::outline::{
 };
 use super::{Editor, Gesture};
 use crate::geometry::{self, Point};
-use crate::scene::{ArrowEnd, Binding, BoundRef, Element, Kind};
+use crate::scene::{ArrowEnd, Binding, BoundRef, Element, FillStyle, Kind};
 
 /// `BINDING_HIGHLIGHT_THICKNESS`.
 const HIGHLIGHT_THICKNESS: f64 = 10.0;
@@ -31,8 +31,10 @@ impl Editor {
         /// `getSuggestedBindingsForArrows` gives up above this many.
         const MOVING_LIMIT: usize = 50;
 
-        let ends: Vec<(usize, ArrowEnd)> = match (&self.gesture, &self.multi) {
-            (_, Some(multi)) => vec![(multi.index, ArrowEnd::End)],
+        // The bool: the arrow moves as a whole, so only ends whose shape is
+        // still in reach count (`getOriginalBindingsIfStillCloseToArrowEnds`).
+        let ends: Vec<(usize, ArrowEnd, bool)> = match (&self.gesture, &self.multi) {
+            (_, Some(multi)) => vec![(multi.index, ArrowEnd::End, false)],
             (
                 Some(Gesture::Line {
                     index,
@@ -40,14 +42,14 @@ impl Editor {
                     ..
                 }),
                 _,
-            ) => vec![(*index, ArrowEnd::End)],
+            ) => vec![(*index, ArrowEnd::End, false)],
             (
                 Some(Gesture::Endpoint {
                     index, which: 0, ..
                 }),
                 _,
-            ) => vec![(*index, ArrowEnd::Start)],
-            (Some(Gesture::Endpoint { index, .. }), _) => vec![(*index, ArrowEnd::End)],
+            ) => vec![(*index, ArrowEnd::Start, false)],
+            (Some(Gesture::Endpoint { index, .. }), _) => vec![(*index, ArrowEnd::End, false)],
             (
                 Some(Gesture::Move {
                     starts,
@@ -57,7 +59,12 @@ impl Editor {
                 _,
             ) if starts.len() <= MOVING_LIMIT => starts
                 .iter()
-                .flat_map(|(index, _)| [(*index, ArrowEnd::Start), (*index, ArrowEnd::End)])
+                .flat_map(|(index, _)| {
+                    [
+                        (*index, ArrowEnd::Start, true),
+                        (*index, ArrowEnd::End, true),
+                    ]
+                })
                 .collect(),
             (None, None) if self.tool == super::Tool::Arrow => {
                 return self
@@ -69,8 +76,13 @@ impl Editor {
             _ => Vec::new(),
         };
         let mut shapes: Vec<&Element> = Vec::new();
-        for (index, end) in ends {
-            if let Some(shape) = self.binding_target(index, end)
+        for (index, end, whole) in ends {
+            let target = if whole {
+                self.moved_arrow_target(index, end)
+            } else {
+                self.binding_target(index, end)
+            };
+            if let Some(shape) = target
                 && !self.selected.contains(&shape.base.id)
                 && !shapes.iter().any(|s| s.base.id == shape.base.id)
             {
@@ -95,6 +107,44 @@ impl Editor {
         }
     }
 
+    /// After an arrow moves as a whole (dragged, nudged, resized, rotated):
+    /// each end keeps a binding only while its shape is still in reach,
+    /// re-aimed at the shape under it, and never picks up a new shape
+    /// (`getBindingStrategyForDraggingArrowOrJoints`).
+    pub(super) fn rebind_moved_arrow(&mut self, index: usize) {
+        for end in [ArrowEnd::Start, ArrowEnd::End] {
+            if !matches!(self.scene.elements[index].kind, Kind::Arrow(_)) {
+                return;
+            }
+            let target = self
+                .moved_arrow_target(index, end)
+                .map(|e| e.base.id.clone());
+            self.set_arrow_binding(index, end, target);
+        }
+    }
+
+    /// The shape a moved arrow's end binds to: the one under it, if the
+    /// end's current shape is still within its binding gap
+    /// (`getOriginalBindingIfStillCloseOfLinearElementEdge`).
+    fn moved_arrow_target(&self, index: usize, end: ArrowEnd) -> Option<&Element> {
+        let arrow = &self.scene.elements[index];
+        if !matches!(arrow.kind, Kind::Arrow(_)) {
+            return None;
+        }
+        let points = arrow_points(arrow);
+        let edge = points[end_index(end, points.len())];
+        let id = arrow.binding(end)?.element_id;
+        let shape = self
+            .scene
+            .elements
+            .iter()
+            .find(|e| e.base.id == id && is_bindable(e))?;
+        if distance_to_outline(shape, edge) > max_binding_gap(shape, self.zoom) {
+            return None;
+        }
+        self.binding_target(index, end)
+    }
+
     /// The topmost shape within binding distance of one end of the arrow at
     /// `index` (`getHoveredElementForBinding`).
     fn binding_target(&self, index: usize, end: ArrowEnd) -> Option<&Element> {
@@ -115,13 +165,29 @@ impl Editor {
 
     /// The topmost bindable shape within binding distance of `point`, other
     /// than those `skip` rules out.
+    ///
+    /// Locked shapes are left out (`isBindableElement(el, false)`), and a
+    /// shape with a solid, visible fill binds anywhere in its box
+    /// (`isBindingFallthroughEnabled`), frames excepted.
     fn bindable_near(&self, point: Point, skip: impl Fn(&Element) -> bool) -> Option<&Element> {
+        let solid = |e: &Element| {
+            e.base.fill_style == FillStyle::Solid
+                && !crate::render::is_transparent(&e.base.background_color)
+                && e.frame_title().is_none()
+        };
+        let in_box = |e: &Element| {
+            let [x1, y1, x2, y2] = geometry::element_bounds(e);
+            (x1..=x2).contains(&point[0]) && (y1..=y2).contains(&point[1])
+        };
         self.scene
             .elements
             .iter()
             .rev()
-            .filter(|e| is_bindable(e) && !skip(e))
-            .find(|e| distance_to_outline(e, point) <= max_binding_gap(e, self.zoom))
+            .filter(|e| is_bindable(e) && !e.is_locked() && !skip(e))
+            .find(|e| {
+                distance_to_outline(e, point) <= max_binding_gap(e, self.zoom)
+                    || (solid(e) && in_box(e))
+            })
     }
 
     /// Moves arrow ends bound to any element in `changed`, so they keep

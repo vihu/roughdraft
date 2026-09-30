@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use super::{Editor, Gesture, Modifiers, common_bounds, normalize};
 use crate::geometry::{self, Point};
 use crate::hit::{self, container_id};
-use crate::scene::Element;
+use crate::scene::{Element, Kind};
 
 impl Editor {
     /// Whether `at` is inside the selection's box, padded by the threshold:
@@ -221,9 +221,10 @@ impl Editor {
                 starts,
                 ..
             }) => {
-                // Dragged arrows bind to, or leave, the shapes they now touch.
+                // Dragged arrows keep bindings still in reach and pick up no
+                // new ones (`getBindingStrategyForDraggingArrowOrJoints`).
                 for (index, _) in starts {
-                    self.bind_arrow_ends(index);
+                    self.rebind_moved_arrow(index);
                 }
                 self.update_frame_membership(at);
                 self.history.record(before);
@@ -245,6 +246,20 @@ impl Editor {
             }
             Some(Gesture::Resize { before, .. } | Gesture::Rotate { before, .. }) => {
                 if before != self.scene.elements {
+                    // Resized or rotated arrows rebind like moved ones.
+                    let arrows: Vec<usize> = self
+                        .scene
+                        .elements
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, e)| {
+                            matches!(e.kind, Kind::Arrow(_)) && self.selected.contains(&e.base.id)
+                        })
+                        .map(|(i, _)| i)
+                        .collect();
+                    for index in arrows {
+                        self.rebind_moved_arrow(index);
+                    }
                     self.refit_selected_frames();
                     self.history.record(before);
                 }

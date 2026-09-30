@@ -260,3 +260,56 @@ fn enter_on_a_line_does_not_start_text() {
     assert!(editor.editing().is_none());
     assert_eq!(editor.scene().elements.len(), 1);
 }
+
+fn end_binding(editor: &Editor, index: usize) -> Option<String> {
+    editor.scene().elements[index]
+        .binding(crate::scene::ArrowEnd::End)
+        .map(|b| b.element_id)
+}
+
+#[test]
+fn moved_arrows_keep_only_bindings_in_reach_and_pick_up_none() {
+    // `r` (index 3) runs from `a` to `b` and is bound to `b` at its end.
+    let mut editor = editor();
+    drag(&mut editor, [150.0, 0.0], [150.0, 0.0], NONE);
+    assert!(editor.is_selected("r"));
+    editor.command(Command::Nudge([0.0, 5.0]));
+    assert_eq!(
+        end_binding(&editor, 3).as_deref(),
+        Some("b"),
+        "still in reach"
+    );
+    for _ in 0..60 {
+        editor.command(Command::Nudge([0.0, 5.0]));
+    }
+    assert_eq!(end_binding(&editor, 3), None, "300 away lets go");
+    let b = editor
+        .scene()
+        .elements
+        .iter()
+        .find(|e| e.base.id == "b")
+        .unwrap();
+    assert!(b.base.bound_elements.iter().flatten().all(|r| r.id != "r"));
+
+    // Dragged back onto `b` as a whole, it does not bind again.
+    drag(&mut editor, [150.0, 305.0], [150.0, 0.0], NONE);
+    assert_eq!(end_binding(&editor, 3), None);
+}
+
+#[test]
+fn arrows_bind_inside_solid_filled_shapes_but_never_to_locked_ones() {
+    // `a` (0..100 x 0..50) has a solid blue fill.
+    let mut editor = editor();
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [50.0, 300.0], [50.0, 25.0], NONE);
+    let arrow = editor.scene().elements.len() - 1;
+    assert_eq!(end_binding(&editor, arrow).as_deref(), Some("a"));
+
+    let mut editor = super::editor();
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    editor.command(Command::ToggleElementLock);
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [50.0, 300.0], [50.0, 2.0], NONE);
+    let arrow = editor.scene().elements.len() - 1;
+    assert_eq!(end_binding(&editor, arrow), None, "a is locked");
+}

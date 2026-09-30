@@ -107,10 +107,15 @@ impl Editor {
                         .iter()
                         .map(|(i, _)| self.scene.elements[*i].base.id.clone())
                         .collect();
-                    for (i, [x, y]) in moving {
+                    for &(i, [x, y]) in &moving {
                         self.place(i, [x + offset[0], y + offset[1]]);
                     }
                     self.update_bound_arrows(&moved);
+                    // Nudged arrows keep only bindings still in reach
+                    // (`bindOrUnbindLinearElements` on arrow keys).
+                    for (i, _) in moving {
+                        self.rebind_moved_arrow(i);
+                    }
                 }
             }
         }
