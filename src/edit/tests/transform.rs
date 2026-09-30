@@ -249,7 +249,13 @@ fn line_editor_selects_drags_adds_and_deletes_points() {
     assert_eq!(editor.editing_line(), Some(id.as_str()));
     let handles = editor.handles().unwrap();
     assert!(handles.editing_line && handles.handles.is_empty());
-    assert_eq!(handles.midpoints, [(1, [50.0, 0.0]), (2, [150.0, 0.0])]);
+    // Round lines have their middles on the rough curve, so near the
+    // chords' middles, not on them (the seed is random).
+    let ends: Vec<usize> = handles.midpoints.iter().map(|m| m.0).collect();
+    assert_eq!(ends, [1, 2]);
+    for (&(_, [x, y]), cx) in handles.midpoints.iter().zip([50.0, 150.0]) {
+        assert!((x - cx).abs() < 5.0 && y.abs() < 5.0, "middle at {x}, {y}");
+    }
 
     // Select the middle and the last point, then drag both.
     drag(&mut editor, [100.0, 0.0], [100.0, 0.0], NONE);
@@ -259,7 +265,8 @@ fn line_editor_selects_drags_adds_and_deletes_points() {
     assert_eq!(points(&editor), [[0.0, 0.0], [100.0, 30.0], [200.0, 30.0]]);
 
     // A segment middle adds a point; Delete removes the selected one.
-    drag(&mut editor, [50.0, 15.0], [50.0, -20.0], NONE);
+    let middle = editor.handles().unwrap().midpoints[0].1;
+    drag(&mut editor, middle, [50.0, -20.0], NONE);
     assert_eq!(points(&editor).len(), 4);
     assert_eq!(editor.handles().unwrap().selected_points, [1]);
     editor.command(Command::Delete);

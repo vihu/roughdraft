@@ -7,6 +7,7 @@ use std::f64::consts::PI;
 use super::{Editor, Gesture, Modifiers, common_bounds};
 use crate::geometry::{self, Affine, Bounds, Point};
 use crate::hit::container_id;
+use crate::render;
 use crate::scene::{Element, Kind};
 
 /// A transform handle on the selection box.
@@ -98,19 +99,16 @@ impl Editor {
         // A 2-point line or the line editor shows only points
         // (`shouldShowBoundingBox`).
         if points.len() == 2 || (editing_line && !points.is_empty()) {
-            // ponytail: straight segment middles; Excalidraw puts them on the
-            // curve of round lines (`getSegmentMidPoint`).
-            let midpoints = points
-                .windows(2)
-                .enumerate()
-                .filter(|(_, ab)| {
-                    let (a, b) = (ab[0], ab[1]);
-                    (b[0] - a[0]).hypot(b[1] - a[1]) * self.zoom >= MIDPOINT_MIN_LENGTH
-                })
-                .map(|(k, ab)| {
-                    let (a, b) = (ab[0], ab[1]);
-                    (k + 1, [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0])
-                })
+            // Middles sit on the drawn curve of round lines, and their
+            // length is measured along it (`getSegmentMidPoint`).
+            let line = self
+                .selection()
+                .next()
+                .expect("points come from the one selected line");
+            let transform = geometry::element_transform(line);
+            let midpoints = (1..points.len())
+                .filter(|&end| render::segment_length(line, end) * self.zoom >= MIDPOINT_MIN_LENGTH)
+                .map(|end| (end, transform.apply(render::segment_midpoint(line, end))))
                 .collect();
             let selected_points = self
                 .line_edit

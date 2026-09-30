@@ -483,18 +483,13 @@ pub(super) fn normalize_angle(angle: f64) -> f64 {
 }
 
 /// Where an arrow's label is centred (`getBoundTextElementPosition`): its
-/// middle point, or the middle of its middle segment.
-// ponytail: straight segment midpoint; Excalidraw takes the curve's
-// midpoint on round arrows with an even number of 4+ points.
+/// middle point, or the middle of its middle segment (on the curve of a
+/// round arrow).
 fn arrow_label_centre(arrow: &Element, points: &[Point]) -> Point {
     let transform = geometry::element_transform(arrow);
     let n = points.len();
     if n % 2 == 1 {
         return transform.apply(points[n / 2]);
     }
-    let (a, b) = (
-        transform.apply(points[n / 2 - 1]),
-        transform.apply(points[n / 2]),
-    );
-    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
+    transform.apply(crate::render::segment_midpoint(arrow, n / 2))
 }

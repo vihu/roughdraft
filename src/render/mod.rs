@@ -16,8 +16,11 @@ use crate::color::Rgba;
 use crate::geometry::{Affine, Point};
 use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
+pub(crate) use self::segment::{segment_length, segment_midpoint};
+
 mod freedraw;
 mod linear;
+mod segment;
 mod shapes;
 mod text;
 
