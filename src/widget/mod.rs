@@ -4,6 +4,7 @@
 //! [`Sketch::view`] mapped to your message type, and pass its messages back
 //! to [`Sketch::update`].
 mod camera;
+mod icons;
 mod keys;
 mod overlay;
 mod paint;

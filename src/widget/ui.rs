@@ -3,11 +3,12 @@
 //! REFERENCE-001 section 14.
 use iced::widget::{
     Column, button, column, container, opaque, pick_list, row, slider, space, text, text_input,
-    themer,
+    themer, tooltip,
 };
 use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
 use super::camera::ZoomKey;
+use super::icons::{Glyph, icon};
 use super::{Appearance, Input, Message, Sketch};
 use crate::color::Rgba;
 use crate::edit::{Command, Style, StyleChange, Tool};
@@ -37,15 +38,17 @@ const STROKES: [&str; 5] = ["#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00
 const BACKGROUNDS: [&str; 5] = ["transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99"];
 
 /// Tools in Excalidraw's order, with their shortcut key.
+/// Tool, name for the tooltip, and the key shown under the icon (the
+/// tooltip names the letter too).
 const TOOLS: [(Tool, &str, &str); 8] = [
-    (Tool::Hand, "Hand", "H"),
-    (Tool::Selection, "Select", "1"),
-    (Tool::Rectangle, "Rect", "2"),
-    (Tool::Diamond, "Diamond", "3"),
-    (Tool::Ellipse, "Ellipse", "4"),
-    (Tool::Arrow, "Arrow", "5"),
-    (Tool::Line, "Line", "6"),
-    (Tool::Text, "Text", "8"),
+    (Tool::Hand, "Hand (H)", "H"),
+    (Tool::Selection, "Selection (V or 1)", "1"),
+    (Tool::Rectangle, "Rectangle (R or 2)", "2"),
+    (Tool::Diamond, "Diamond (D or 3)", "3"),
+    (Tool::Ellipse, "Ellipse (O or 4)", "4"),
+    (Tool::Arrow, "Arrow (A or 5)", "5"),
+    (Tool::Line, "Line (L or 6)", "6"),
+    (Tool::Text, "Text (T or 8)", "8"),
 ];
 
 /// Arrowhead choices for the pick lists.
@@ -95,23 +98,38 @@ impl Sketch {
     /// Tools across the top, with the tool lock first.
     pub(super) fn toolbar(&self) -> Element<'_, Message> {
         let current = self.editor.tool();
-        let lock = choice(
-            "Lock",
-            self.editor.is_tool_locked(),
+        let theme = self.theme();
+        let palette = theme.palette();
+        let (ink, on_primary) = (palette.background.base.text, palette.primary.base.text);
+        let tool_button =
+            |glyph: Glyph, key: &'static str, name: &'static str, active: bool, message| {
+                let color = if active { on_primary } else { ink };
+                let face = column![icon(glyph, color), text(key).size(9).color(color)]
+                    .align_x(Alignment::Center);
+                let button = button(face)
+                    .padding([4, 6])
+                    .style(if active {
+                        button::primary
+                    } else {
+                        button::text
+                    })
+                    .on_press(message);
+                let tip = container(text(name).size(12))
+                    .padding([4, 8])
+                    .style(panel_style);
+                tooltip(button, tip, tooltip::Position::Bottom).into()
+            };
+        let locked = self.editor.is_tool_locked();
+        let lock = tool_button(
+            Glyph::Lock { locked },
+            "Q",
+            "Keep the tool after drawing (Q)",
+            locked,
             Message(Input::Command(Command::ToggleLock)),
         );
-        let tools = TOOLS.iter().map(|(tool, name, key)| {
-            let label =
-                column![text(*name).size(13), text(*key).size(9)].align_x(Alignment::Center);
-            button(label)
-                .padding([4, 8])
-                .style(if *tool == current {
-                    button::primary
-                } else {
-                    button::text
-                })
-                .on_press(Message(Input::Command(Command::Tool(*tool))))
-                .into()
+        let tools = TOOLS.iter().map(|&(tool, name, key)| {
+            let message = Message(Input::Command(Command::Tool(tool)));
+            tool_button(Glyph::Tool(tool), key, name, tool == current, message)
         });
         let bar = row(std::iter::once(lock).chain(tools))
             .spacing(2)
@@ -157,14 +175,18 @@ impl Sketch {
             .into()
     }
 
+    /// The iced theme matching the canvas.
+    fn theme(&self) -> Theme {
+        match self.appearance {
+            Appearance::Light => Theme::Light,
+            Appearance::Dark => Theme::Dark,
+        }
+    }
+
     /// Draws `content` in the light or dark iced theme that matches the
     /// canvas, whatever the host's theme is, like Excalidraw's UI.
     fn themed<'a>(&self, content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
-        let theme = match self.appearance {
-            Appearance::Light => Theme::Light,
-            Appearance::Dark => Theme::Dark,
-        };
-        themer(Some(theme), content)
+        themer(Some(self.theme()), content)
             .text_color(|theme| theme.palette().background.base.text)
             .into()
     }
