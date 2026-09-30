@@ -72,11 +72,12 @@ jobs:
       - uses: actions/checkout@v7
       - id: version
         run: echo "version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
-      # Uploads the bundle as the artifact <bundle>-<arch>.
+      # Also uploads the bundle as an artifact.
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: app/packaging/io.github.vihu.roughdraft.yml
           bundle: roughdraft-${{ steps.version.outputs.version }}-${{ matrix.arch }}.flatpak
+          artifact-name: flatpak-${{ matrix.arch }}
           arch: ${{ matrix.arch }}
           cache: false
 
