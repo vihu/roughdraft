@@ -34,6 +34,7 @@ use crate::render::Drawing;
 use crate::scene::{Grid, Scene};
 
 pub use self::menu::Request;
+pub use self::text::font_measure;
 pub use crate::fonts::EXCALIFONT;
 
 /// Canvas color scheme, like Excalidraw's theme toggle.

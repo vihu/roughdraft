@@ -34,6 +34,13 @@ pub(super) fn load_fonts() {
     });
 }
 
+/// Returns a [`Measure`] with the bundled fonts, the one the canvas draws
+/// with: for building scenes outside a window (`roughdraft build`).
+pub fn font_measure() -> Box<dyn Measure> {
+    load_fonts();
+    Box::new(CosmicMeasure)
+}
+
 /// [`Measure`] backed by iced's text engine, with shaping.
 #[derive(Debug)]
 pub(super) struct CosmicMeasure;

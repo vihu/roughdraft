@@ -2,6 +2,7 @@
 #![deny(unsafe_code, missing_docs, rustdoc::broken_intra_doc_links)]
 
 mod base64;
+pub mod build;
 pub mod color;
 pub mod edit;
 pub mod fonts;

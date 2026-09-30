@@ -193,7 +193,7 @@ impl Editor {
     /// Moves arrow ends bound to any element in `changed`, so they keep
     /// their focus and gap (`updateBoundElements`). Arrows in `changed`
     /// moved themselves and are left alone.
-    pub(super) fn update_bound_arrows(&mut self, changed: &HashSet<String>) {
+    pub(crate) fn update_bound_arrows(&mut self, changed: &HashSet<String>) {
         for index in 0..self.scene.elements.len() {
             let arrow = &self.scene.elements[index];
             if arrow.base.is_deleted
@@ -249,7 +249,7 @@ impl Editor {
 
     /// Sets one end's binding to `target` (or none), keeping both sides'
     /// `boundElements` in step (`bindLinearElement`, `unbindLinearElement`).
-    pub(super) fn set_arrow_binding(
+    pub(crate) fn set_arrow_binding(
         &mut self,
         index: usize,
         end: ArrowEnd,

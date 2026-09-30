@@ -2,8 +2,11 @@
 //!
 //! ```text
 //! roughdraft [file.excalidraw] [--dark]
+//! roughdraft build <skeleton.json> -o <out.excalidraw>
 //! cargo run --release -p roughdraft-app -- [file.excalidraw] [--dark]
 //! ```
+//!
+//! `roughdraft help` lists the commands for scripts and agents (`cli.rs`).
 //!
 //! Keys follow Excalidraw:
 //!
@@ -36,6 +39,8 @@
 //!   everything, Shift+2 / Shift+3 the selection; Alt+Shift+D dark mode;
 //!   Ctrl+' shows the grid, which drawing and moving snap to (hold Ctrl to
 //!   place freely), also in the menu.
+mod cli;
+
 use std::path::PathBuf;
 
 use iced::keyboard::{self, key};
@@ -47,6 +52,10 @@ use roughdraft::widget::{self, Appearance, Request, Sketch};
 
 pub fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `roughdraft build ...` and the other commands run without a window.
+    if let Some(code) = cli::run(&args) {
+        std::process::exit(code);
+    }
     let file = args
         .first()
         .filter(|a| !a.starts_with("--"))

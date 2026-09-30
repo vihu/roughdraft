@@ -27,6 +27,7 @@ use std::collections::HashSet;
 pub use self::flip::Axis;
 pub use self::order::Order;
 pub use self::style::{Style, StyleChange};
+pub(crate) use self::text::max_label_width;
 pub use self::text::{ApproxMeasure, Measure};
 pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
 use crate::geometry::{self, Bounds, Point};
@@ -275,6 +276,12 @@ impl Editor {
     /// Returns the scene.
     pub fn scene(&self) -> &Scene {
         &self.scene
+    }
+
+    /// Returns the scene for changes the editor has no gesture for
+    /// (building a scene from a skeleton); no undo step is recorded.
+    pub(crate) fn scene_mut(&mut self) -> &mut Scene {
+        &mut self.scene
     }
 
     /// Returns the active tool.
