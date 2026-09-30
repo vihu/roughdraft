@@ -65,10 +65,13 @@ pub fn main() -> iced::Result {
     } else {
         Appearance::Light
     };
+    // `--origin x,y` or `--origin=x,y` (the second form keeps a negative x
+    // from reading as a flag).
     let origin = args
         .iter()
         .position(|a| a == "--origin")
-        .and_then(|i| args.get(i + 1))
+        .and_then(|i| args.get(i + 1).map(String::as_str))
+        .or_else(|| args.iter().find_map(|a| a.strip_prefix("--origin=")))
         .map(|xy| {
             let (x, y) = xy.split_once(',').expect("--origin takes x,y");
             [x.parse().expect("origin x"), y.parse().expect("origin y")]

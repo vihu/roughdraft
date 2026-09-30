@@ -5,6 +5,16 @@ use iced::widget::canvas::{self, Frame};
 
 use super::Sketch;
 use crate::geometry::Affine;
+use crate::render::Crop;
+
+/// A decoded picture: a file, the part of it shown, and its mirroring.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) struct Picture {
+    file: String,
+    /// Crop rectangle in whole file pixels, `None` for the whole file.
+    crop: Option<[i64; 4]>,
+    flip: [bool; 2],
+}
 
 // Public API
 impl Sketch {
@@ -14,7 +24,11 @@ impl Sketch {
     /// placeholder.
     pub fn set_image(&mut self, file_id: &str, bytes: &[u8]) {
         if let Some(handle) = decode_image(bytes) {
-            self.images.insert(file_id.to_owned(), handle);
+            // Cut or mirrored views of the old picture are made again.
+            self.images.retain(|picture, _| picture.file != file_id);
+            self.images
+                .insert(Picture::of(file_id, None, [false, false]), handle);
+            self.refresh();
             self.clear_caches();
         }
     }
@@ -53,12 +67,12 @@ impl Sketch {
     pub(super) fn draw_image(
         &self,
         frame: &mut Frame,
-        file_id: &str,
+        picture: &Picture,
         size: [f64; 2],
         opacity: f32,
         transform: Affine,
     ) {
-        let Some(handle) = self.images.get(file_id) else {
+        let Some(handle) = self.images.get(picture) else {
             let [w, h] = size;
             let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]].map(|p| {
                 let [x, y] = transform.apply(p);
@@ -94,6 +108,64 @@ impl Sketch {
     }
 }
 
+impl Picture {
+    /// The picture an image element shows.
+    pub(super) fn of(file: &str, crop: Option<&Crop>, flip: [bool; 2]) -> Self {
+        Self {
+            file: file.to_owned(),
+            crop: crop.map(|c| c.rect.map(|v| v.round() as i64)),
+            flip,
+        }
+    }
+
+    /// Cuts and mirrors the whole picture's pixels (`drawImage` with a
+    /// source rectangle, then `scale(-1, 1)`); the crop is scaled from the
+    /// natural size it was made for to the decoded one.
+    pub(super) fn derive(
+        &self,
+        whole: &iced::widget::image::Handle,
+        crop: Option<&Crop>,
+    ) -> Option<iced::widget::image::Handle> {
+        let iced::widget::image::Handle::Rgba {
+            width,
+            height,
+            pixels,
+            ..
+        } = whole
+        else {
+            return None;
+        };
+        let (width, height) = (*width as usize, *height as usize);
+        let [x, y, w, h] = match crop {
+            Some(crop) => {
+                let (sx, sy) = (
+                    width as f64 / crop.natural[0],
+                    height as f64 / crop.natural[1],
+                );
+                let [x, y, w, h] = crop.rect;
+                let x0 = ((x * sx).round().max(0.0) as usize).min(width - 1);
+                let y0 = ((y * sy).round().max(0.0) as usize).min(height - 1);
+                let w0 = ((w * sx).round().max(1.0) as usize).min(width - x0);
+                let h0 = ((h * sy).round().max(1.0) as usize).min(height - y0);
+                [x0, y0, w0, h0]
+            }
+            None => [0, 0, width, height],
+        };
+        let mut out = Vec::with_capacity(w * h * 4);
+        for row in 0..h {
+            let from_row = y + if self.flip[1] { h - 1 - row } else { row };
+            for col in 0..w {
+                let from_col = x + if self.flip[0] { w - 1 - col } else { col };
+                let i = (from_row * width + from_col) * 4;
+                out.extend_from_slice(&pixels[i..i + 4]);
+            }
+        }
+        Some(iced::widget::image::Handle::from_rgba(
+            w as u32, h as u32, out,
+        ))
+    }
+}
+
 /// Decodes an image to RGBA up front: iced draws RGBA handles in the frame
 /// they appear, while encoded ones load on a worker and pop in later.
 // ponytail: decodes on the UI thread when a scene loads; move to a Task if
@@ -116,4 +188,42 @@ pub(super) fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Option<Vec<u
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .ok()?;
     Some(png)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Picture;
+    use crate::render::Crop;
+
+    #[test]
+    fn crops_scale_to_the_decoded_size_and_flips_mirror() {
+        // 4 x 2 pixels, red channel = index.
+        let pixels: Vec<u8> = (0..8u8).flat_map(|i| [i, 0, 0, 255]).collect();
+        let whole = iced::widget::image::Handle::from_rgba(4, 2, pixels);
+        let red = |handle: iced::widget::image::Handle| match handle {
+            iced::widget::image::Handle::Rgba {
+                width,
+                height,
+                pixels,
+                ..
+            } => (
+                (width, height),
+                pixels.chunks(4).map(|p| p[0]).collect::<Vec<_>>(),
+            ),
+            _ => unreachable!(),
+        };
+        // The right half, given in a natural size twice the decoded one.
+        let crop = Crop {
+            rect: [4.0, 0.0, 4.0, 4.0],
+            natural: [8.0, 4.0],
+        };
+        let cut = Picture::of("f", Some(&crop), [false, false])
+            .derive(&whole, Some(&crop))
+            .unwrap();
+        assert_eq!(red(cut), ((2, 2), vec![2, 3, 6, 7]));
+        let mirrored = Picture::of("f", None, [true, true])
+            .derive(&whole, None)
+            .unwrap();
+        assert_eq!(red(mirrored), ((4, 2), vec![7, 6, 5, 4, 3, 2, 1, 0]));
+    }
 }

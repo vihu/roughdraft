@@ -132,6 +132,10 @@ fn compare_marks(want: Vec<(Affine, Mark)>, got: Vec<(Affine, Mark)>) -> Vec<Str
             got.len()
         )];
     }
+    // Only images (compared by pixels instead): nothing to line up.
+    if want.is_empty() {
+        return Vec::new();
+    }
     // Excalidraw's export shifts everything by one offset (bounds + padding).
     let offset = {
         let ([wx, wy], [gx, gy]) = (want[0].0.apply([0.0, 0.0]), got[0].0.apply([0.0, 0.0]));

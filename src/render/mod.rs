@@ -62,7 +62,20 @@ pub enum Item {
         size: [f64; 2],
         /// Element opacity, from 0 to 1.
         opacity: f32,
+        /// The part of the file shown, or the whole file.
+        crop: Option<Crop>,
+        /// Mirrored horizontally and vertically about the box centre.
+        flip: [bool; 2],
     },
+}
+
+/// The part of an image file an image element shows (`crop`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Crop {
+    /// Left, top, width and height of the shown part, in file pixels.
+    pub rect: [f64; 4],
+    /// The file's size the rectangle refers to.
+    pub natural: [f64; 2],
 }
 
 /// One path command.
@@ -215,11 +228,14 @@ fn draw(element: &Element, background: &str) -> Option<Drawing> {
             box_center
         }
         Kind::Other(_) => {
-            // ponytail: `crop` and flips (`scale`) ignored; the picture fills the box
             items.push(Item::Image {
                 file_id: element.file_id()?.to_owned(),
                 size: [width, height],
                 opacity,
+                crop: element
+                    .image_crop()
+                    .map(|(rect, natural)| Crop { rect, natural }),
+                flip: element.image_flip(),
             });
             box_center
         }

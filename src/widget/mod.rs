@@ -20,7 +20,7 @@ use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
 use camera::{Camera, ZoomKey};
-use picture::{decode_image, encode_png};
+use picture::{Picture, decode_image, encode_png};
 
 use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Pointer};
@@ -59,8 +59,9 @@ pub struct Sketch {
     /// What the text overlay edits, and the id of the element it belongs to.
     content: text_editor::Content,
     editing: Option<String>,
-    /// Decoded images by file id.
-    images: HashMap<String, iced::widget::image::Handle>,
+    /// Decoded pictures: each file whole, and cut or mirrored as elements
+    /// show it.
+    images: HashMap<Picture, iced::widget::image::Handle>,
     /// Canvas size at the last draw, for placing inserted images.
     viewport: std::cell::Cell<iced::Size>,
     /// A colour being typed in the style panel, until the next click.
@@ -381,18 +382,33 @@ impl Sketch {
             self.drawings.insert(id.clone(), rendered);
         }
         for element in scene.elements.iter().filter(|e| !e.base.is_deleted) {
-            let Some(id) = element
-                .file_id()
-                .filter(|id| !self.images.contains_key(*id))
-            else {
+            let Some(id) = element.file_id() else {
                 continue;
             };
-            let handle = scene
-                .file_data_url(id)
-                .and_then(crate::base64::decode_data_url)
-                .and_then(|(_, bytes)| decode_image(&bytes));
-            if let Some(handle) = handle {
-                self.images.insert(id.to_owned(), handle);
+            let whole = Picture::of(id, None, [false, false]);
+            if !self.images.contains_key(&whole) {
+                let handle = scene
+                    .file_data_url(id)
+                    .and_then(crate::base64::decode_data_url)
+                    .and_then(|(_, bytes)| decode_image(&bytes));
+                if let Some(handle) = handle {
+                    self.images.insert(whole.clone(), handle);
+                    static_changed = true;
+                }
+            }
+            // A cut or mirrored view comes from the whole picture's pixels.
+            let crop = element
+                .image_crop()
+                .map(|(rect, natural)| render::Crop { rect, natural });
+            let picture = Picture::of(id, crop.as_ref(), element.image_flip());
+            if picture != whole
+                && !self.images.contains_key(&picture)
+                && let Some(handle) = self
+                    .images
+                    .get(&whole)
+                    .and_then(|w| picture.derive(w, crop.as_ref()))
+            {
+                self.images.insert(picture, handle);
                 static_changed = true;
             }
         }
@@ -468,8 +484,11 @@ impl Sketch {
                         file_id,
                         size,
                         opacity,
+                        crop,
+                        flip,
                     } => {
-                        self.draw_image(frame, file_id, *size, *opacity, transform);
+                        let picture = Picture::of(file_id, crop.as_ref(), *flip);
+                        self.draw_image(frame, &picture, *size, *opacity, transform);
                     }
                     _ => paint::draw_item(frame, item, transform, &|c| self.paint(c)),
                 }

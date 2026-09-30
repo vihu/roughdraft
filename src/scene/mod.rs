@@ -378,6 +378,32 @@ impl Element {
             .unwrap_or(true)
     }
 
+    /// Returns an image element's `crop`: the shown rectangle (left, top,
+    /// width, height) and the natural size it refers to, in file pixels.
+    pub fn image_crop(&self) -> Option<([f64; 4], [f64; 2])> {
+        let crop = self.json.get("crop")?;
+        let get = |key: &str| crop.get(key).and_then(Value::as_f64);
+        Some((
+            [get("x")?, get("y")?, get("width")?, get("height")?],
+            [get("naturalWidth")?, get("naturalHeight")?],
+        ))
+    }
+
+    /// Returns whether an image element is mirrored horizontally and
+    /// vertically (negative `scale`).
+    pub fn image_flip(&self) -> [bool; 2] {
+        let scale = |i: usize| {
+            self.json
+                .get("scale")
+                .and_then(|s| s.get(i))
+                .and_then(Value::as_f64)
+        };
+        [
+            scale(0).is_some_and(|s| s < 0.0),
+            scale(1).is_some_and(|s| s < 0.0),
+        ]
+    }
+
     /// Returns an image element's file id.
     pub fn file_id(&self) -> Option<&str> {
         match &self.kind {

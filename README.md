@@ -83,7 +83,7 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 | --- | --- |
 | Shapes | Rectangle, diamond, ellipse; lines and arrows, straight or multi-point, with every Excalidraw arrowhead; drag any point, and Excalidraw's line editor to add and delete points |
 | Text | Free text and labels inside shapes and on arrows, wrapped like Excalidraw, in Excalidraw's fonts; side handles re-wrap free text |
-| Images | Rendered from `files[id].dataURL`; insert, paste, copy between editors |
+| Images | Rendered from `files[id].dataURL` with Excalidraw's crop and flips; insert, paste, copy between editors |
 | Editing | Select, box select, move, Alt+drag duplicate, resize, rotate, delete, duplicate, undo/redo, z-order, group, arrow binding with Excalidraw's highlight; locked elements stay put |
 | Style | Stroke and background color (swatches or hex), fill (hachure, cross-hatch, solid), stroke width and style, sloppiness, edges, opacity, arrowheads, font size, family and alignment |
 | App | Excalidraw's clipboard format, pan and zoom (keyboard zoom and fit too), Excalidraw's keyboard shortcuts, dark mode with Excalidraw's canvas filter and a matching tool bar |
@@ -91,7 +91,7 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 | Export | SVG shaped like Excalidraw's `exportToSvg`, optionally with its fonts embedded |
 
 Not supported: freedraw, frames, embeds, laser, elbow arrow routing (drawn as
-polylines), image crop, snapping, collaboration. Elements of these types are
+polylines), editing an image's crop, snapping, collaboration. Elements of these types are
 kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
 bundled and render in the system sans or monospace font.
 

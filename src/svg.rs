@@ -155,21 +155,56 @@ fn write_item(svg: &mut String, item: &Item, scene: &Scene) {
             file_id,
             size,
             opacity,
+            crop,
+            flip,
         } => {
             let Some(url) = scene.file_data_url(file_id) else {
                 return;
             };
+            let [w, h] = *size;
+            // Mirroring about the box centre, then the opacity.
+            let [fx, fy] = flip.map(|f| if f { -1.0 } else { 1.0 });
             let _ = write!(
                 svg,
-                r#"<image href="{}" x="0" y="0" width="{}" height="{}" preserveAspectRatio="none""#,
-                escape(url),
-                num(size[0]),
-                num(size[1])
+                r#"<g transform="matrix({} 0 0 {} {} {})""#,
+                num(fx),
+                num(fy),
+                num(if flip[0] { w } else { 0.0 }),
+                num(if flip[1] { h } else { 0.0 })
             );
             if *opacity < 1.0 {
                 let _ = write!(svg, r#" opacity="{}""#, num(f64::from(*opacity)));
             }
-            svg.push_str("/>");
+            svg.push('>');
+            match crop {
+                // The crop rectangle of the whole picture, stretched to the box.
+                Some(crop) => {
+                    let [x, y, cw, ch] = crop.rect;
+                    let _ = write!(
+                        svg,
+                        r#"<svg x="0" y="0" width="{}" height="{}" viewBox="{} {} {} {}" preserveAspectRatio="none"><image href="{}" width="{}" height="{}"/></svg>"#,
+                        num(w),
+                        num(h),
+                        num(x),
+                        num(y),
+                        num(cw),
+                        num(ch),
+                        escape(url),
+                        num(crop.natural[0]),
+                        num(crop.natural[1])
+                    );
+                }
+                None => {
+                    let _ = write!(
+                        svg,
+                        r#"<image href="{}" x="0" y="0" width="{}" height="{}" preserveAspectRatio="none"/>"#,
+                        escape(url),
+                        num(w),
+                        num(h)
+                    );
+                }
+            }
+            svg.push_str("</g>");
         }
         Item::Text(block) => {
             let anchor = match block.align {
