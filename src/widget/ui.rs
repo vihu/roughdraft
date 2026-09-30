@@ -2,11 +2,11 @@
 //! tools across the top, style options down the left. Values follow
 //! REFERENCE-001 section 14.
 use iced::widget::{
-    Column, button, column, container, opaque, pick_list, row, slider, space, text,
+    Column, button, column, container, opaque, pick_list, row, slider, space, text, themer,
 };
 use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
-use super::{Input, Message, Sketch};
+use super::{Appearance, Input, Message, Sketch};
 use crate::color::Rgba;
 use crate::edit::{Command, Style, StyleChange, Tool};
 use crate::scene::{Arrowhead, FillStyle, Kind, StrokeStyle, TextAlign};
@@ -98,9 +98,21 @@ impl Sketch {
             .spacing(2)
             .align_y(Alignment::Center);
         let bar = container(bar).padding(4).style(panel_style);
-        container(opaque(bar))
+        container(opaque(self.themed(bar)))
             .center_x(Length::Fill)
             .padding(12)
+            .into()
+    }
+
+    /// Draws `content` in the light or dark iced theme that matches the
+    /// canvas, whatever the host's theme is, like Excalidraw's UI.
+    fn themed<'a>(&self, content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+        let theme = match self.appearance {
+            Appearance::Light => Theme::Light,
+            Appearance::Dark => Theme::Dark,
+        };
+        themer(Some(theme), content)
+            .text_color(|theme| theme.palette().background.base.text)
             .into()
     }
 
@@ -290,7 +302,7 @@ impl Sketch {
             .padding(12)
             .style(panel_style);
         Some(
-            container(opaque(panel))
+            container(opaque(self.themed(panel)))
                 .padding(iced::Padding {
                     top: 76.0,
                     left: 12.0,
@@ -384,11 +396,12 @@ fn arrowheads(style: &Style) -> Element<'static, Message> {
     row![start, end, space::horizontal()].spacing(4).into()
 }
 
-fn panel_style(_theme: &Theme) -> container::Style {
+fn panel_style(theme: &Theme) -> container::Style {
+    let palette = theme.palette();
     container::Style {
-        background: Some(Background::Color(Color::WHITE)),
+        background: Some(Background::Color(palette.background.base.color)),
         border: Border {
-            color: Color::from_rgb8(0xe9, 0xec, 0xef),
+            color: palette.background.strong.color,
             width: 1.0,
             radius: 8.0.into(),
         },
