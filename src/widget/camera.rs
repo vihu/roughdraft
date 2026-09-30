@@ -167,10 +167,10 @@ mod tests {
     #[test]
     fn zoom_keys_match_by_code() {
         let shift = Modifiers::SHIFT;
-        assert_eq!(zoom_key(Code::Equal, Modifiers::CTRL), Some(ZoomKey::In));
+        assert_eq!(zoom_key(Code::Equal, Modifiers::COMMAND), Some(ZoomKey::In));
         assert_eq!(zoom_key(Code::Minus, shift), Some(ZoomKey::Out));
         assert_eq!(
-            zoom_key(Code::Digit0, Modifiers::CTRL),
+            zoom_key(Code::Digit0, Modifiers::COMMAND),
             Some(ZoomKey::Reset)
         );
         assert_eq!(zoom_key(Code::Digit1, shift), Some(ZoomKey::FitAll));

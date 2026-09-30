@@ -44,7 +44,8 @@ jobs:
         with:
           tool: nextest
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo nextest run --workspace --locked
+      # Every failure, not just the first: a platform-only failure shows in full.
+      - run: cargo nextest run --workspace --locked --no-fail-fast
       # nextest does not run doctests (the README example is one).
       - run: cargo test --workspace --doc --locked
 

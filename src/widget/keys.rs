@@ -81,19 +81,19 @@ mod tests {
     use super::{Command, Tool, code_shortcut, shortcut};
 
     #[test]
-    fn style_copy_matches_the_key_code_with_ctrl_and_alt() {
+    fn style_copy_matches_the_key_code_with_command_and_alt() {
         use iced::keyboard::key::Code;
-        let ctrl_alt = Modifiers::CTRL | Modifiers::ALT;
+        let command_alt = Modifiers::COMMAND | Modifiers::ALT;
         assert_eq!(
-            code_shortcut(Code::KeyC, ctrl_alt),
+            code_shortcut(Code::KeyC, command_alt),
             Some(Command::CopyStyles)
         );
         assert_eq!(
-            code_shortcut(Code::KeyV, ctrl_alt),
+            code_shortcut(Code::KeyV, command_alt),
             Some(Command::PasteStyles)
         );
         assert_eq!(
-            code_shortcut(Code::KeyC, Modifiers::CTRL),
+            code_shortcut(Code::KeyC, Modifiers::COMMAND),
             None,
             "plain copy"
         );
@@ -101,16 +101,16 @@ mod tests {
 
     #[test]
     fn shortcuts_follow_excalidraw() {
-        let ctrl = Modifiers::CTRL;
+        let command = Modifiers::COMMAND;
         let key = |c: &str| Key::Character(c.into());
-        assert_eq!(shortcut(&key("z"), ctrl), Some(Command::Undo));
+        assert_eq!(shortcut(&key("z"), command), Some(Command::Undo));
         assert_eq!(
-            shortcut(&key("Z"), ctrl | Modifiers::SHIFT),
+            shortcut(&key("Z"), command | Modifiers::SHIFT),
             Some(Command::Redo)
         );
-        assert_eq!(shortcut(&key("d"), ctrl), Some(Command::Duplicate));
+        assert_eq!(shortcut(&key("d"), command), Some(Command::Duplicate));
         assert_eq!(
-            shortcut(&key("L"), ctrl | Modifiers::SHIFT),
+            shortcut(&key("L"), command | Modifiers::SHIFT),
             Some(Command::ToggleElementLock)
         );
         assert_eq!(
@@ -139,11 +139,11 @@ mod tests {
             Some(Command::Nudge([-5.0, 0.0]))
         );
         assert_eq!(
-            shortcut(&key("<"), ctrl | Modifiers::SHIFT),
+            shortcut(&key("<"), command | Modifiers::SHIFT),
             Some(Command::SmallerFont)
         );
         assert_eq!(
-            shortcut(&key("."), ctrl | Modifiers::SHIFT),
+            shortcut(&key("."), command | Modifiers::SHIFT),
             Some(Command::LargerFont)
         );
     }
