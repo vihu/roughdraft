@@ -43,7 +43,7 @@ const PADDING: f64 = 5.0;
 const CENTER_SNAP: f64 = 30.0;
 
 /// Line height per em for Excalidraw fonts (`FONT_METADATA`).
-fn line_height(font_family: u32) -> f64 {
+pub(super) fn line_height(font_family: u32) -> f64 {
     match font_family {
         6 => 1.35,
         3 => 1.2,
@@ -85,6 +85,48 @@ impl Editor {
         let Some(edit) = &self.text else { return };
         let index = edit.index;
         let original = text.replace("\r\n", "\n").replace('\t', "        ");
+        self.layout_text(index, &original);
+    }
+
+    /// Ends editing. Empty text is deleted (and unbound from its container);
+    /// otherwise the edit becomes one undo step and the text, or its
+    /// container, is selected.
+    pub fn finish_text(&mut self) {
+        let Some(TextEdit { index, before }) = self.text.take() else {
+            return;
+        };
+        let element = &self.scene.elements[index];
+        let empty = matches!(&element.kind, Kind::Text(t) if t.text.trim().is_empty());
+        let id = element.base.id.clone();
+        let container = container_id(element).map(str::to_owned);
+        if empty {
+            let element = &mut self.scene.elements[index];
+            element.base.is_deleted = true;
+            element.touch();
+            let doomed = std::iter::once(id.clone()).collect();
+            for other in self.scene.elements.iter_mut() {
+                if other.forget_bindings(&doomed) {
+                    other.touch();
+                }
+            }
+        }
+        if before != self.scene.elements {
+            self.history.record(before);
+        }
+        self.selected.clear();
+        if !empty || container.is_some() {
+            self.selected.insert(container.unwrap_or(id));
+        }
+    }
+}
+
+// Private API
+impl Editor {
+    /// Sets a text element's `originalText` and lays it out: free text is
+    /// measured (keeping its alignment anchor), labels are wrapped to their
+    /// container, which grows to fit.
+    pub(super) fn layout_text(&mut self, index: usize, original: &str) {
+        let original = original.to_owned();
         let container = container_id(&self.scene.elements[index])
             .and_then(|id| self.scene.elements.iter().position(|e| e.base.id == id));
         let Kind::Text(label) = &self.scene.elements[index].kind else {
@@ -128,40 +170,6 @@ impl Editor {
         }
     }
 
-    /// Ends editing. Empty text is deleted (and unbound from its container);
-    /// otherwise the edit becomes one undo step and the text, or its
-    /// container, is selected.
-    pub fn finish_text(&mut self) {
-        let Some(TextEdit { index, before }) = self.text.take() else {
-            return;
-        };
-        let element = &self.scene.elements[index];
-        let empty = matches!(&element.kind, Kind::Text(t) if t.text.trim().is_empty());
-        let id = element.base.id.clone();
-        let container = container_id(element).map(str::to_owned);
-        if empty {
-            let element = &mut self.scene.elements[index];
-            element.base.is_deleted = true;
-            element.touch();
-            let doomed = std::iter::once(id.clone()).collect();
-            for other in self.scene.elements.iter_mut() {
-                if other.forget_bindings(&doomed) {
-                    other.touch();
-                }
-            }
-        }
-        if before != self.scene.elements {
-            self.history.record(before);
-        }
-        self.selected.clear();
-        if !empty || container.is_some() {
-            self.selected.insert(container.unwrap_or(id));
-        }
-    }
-}
-
-// Private API
-impl Editor {
     /// Pastes plain text as a new text element centred on `at`.
     pub(super) fn paste_text(&mut self, text: &str, at: Point) -> bool {
         if text.trim().is_empty() {

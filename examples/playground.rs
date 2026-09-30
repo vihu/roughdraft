@@ -240,7 +240,7 @@ fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {
         fonts: vec![EXCALIFONT.into()],
         ..iced::Settings::default()
     };
-    let mut simulator = iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, sketch.view());
+    let mut simulator = iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, sketch.canvas());
     let snapshot = simulator
         .snapshot(&iced::Theme::Light)
         .map_err(|e| e.to_string())?;

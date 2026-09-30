@@ -7,6 +7,7 @@ mod clipboard;
 mod commands;
 mod create;
 mod resize;
+mod restyle;
 mod select;
 mod style;
 mod text;
@@ -14,7 +15,7 @@ mod transform;
 
 use std::collections::HashSet;
 
-pub use self::style::Style;
+pub use self::style::{Style, StyleChange};
 pub use self::text::{ApproxMeasure, Measure};
 pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
 use crate::geometry::{self, Bounds, Point};

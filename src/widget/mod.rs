@@ -7,6 +7,7 @@ mod overlay;
 mod paint;
 mod program;
 mod text;
+mod ui;
 
 use std::collections::HashMap;
 
@@ -82,6 +83,8 @@ enum Input {
         factor: f64,
         cursor: [f64; 2],
     },
+    /// A change from the style panel.
+    Style(edit::StyleChange),
     /// An edit in the text overlay.
     Text(text_editor::Action),
     FinishText,
@@ -181,6 +184,10 @@ impl Sketch {
                 }
                 Task::none()
             }
+            Input::Style(change) => {
+                self.editor.apply_style(change);
+                Task::none()
+            }
             Input::FinishText => {
                 self.editor.finish_text();
                 Task::none()
@@ -221,8 +228,16 @@ impl Sketch {
         self.clear_caches();
     }
 
-    /// Returns the canvas widget, filling the available space.
+    /// Returns the editor: canvas with the tool bar and style panel over it.
     pub fn view(&self) -> Element<'_, Message> {
+        let mut layers = vec![self.canvas(), self.toolbar()];
+        layers.extend(self.style_panel());
+        iced::widget::Stack::with_children(layers).into()
+    }
+
+    /// Returns only the canvas (and the text overlay while typing), for
+    /// hosts that bring their own chrome, and for snapshots.
+    pub fn canvas(&self) -> Element<'_, Message> {
         let canvas = Canvas::new(self).width(Length::Fill).height(Length::Fill);
         match self.text_overlay() {
             Some(overlay) => stack![canvas, overlay].into(),

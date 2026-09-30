@@ -104,3 +104,26 @@ fn double_click_then_typing_creates_measured_text() {
     assert!(width > 5.0 && width < 21.0, "measured width {width}");
     assert_eq!((text.base.x, text.base.y), (100.0, 100.0));
 }
+
+#[test]
+fn clicking_a_swatch_restyles_the_selection_without_deselecting() {
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    let click = |at: Point| {
+        move |ui: &mut iced_test::Simulator<'_, roughdraft::widget::Message>| {
+            ui.point_at(at);
+            ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+            ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+        }
+    };
+    run(&mut sketch, click(Point::new(480.0, 345.0)));
+    assert!(sketch.editor().is_selected("box"));
+    // Second stroke swatch (red): panel at (12, 76), padding 12, label, 22px swatches 4 apart.
+    run(&mut sketch, click(Point::new(61.0, 117.0)));
+    assert!(
+        sketch.editor().is_selected("box"),
+        "the click stays in the panel"
+    );
+    assert_eq!(sketch.scene().elements[0].base.stroke_color, "#e03131");
+}

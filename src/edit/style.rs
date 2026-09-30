@@ -83,3 +83,87 @@ impl Style {
         }
     }
 }
+
+/// One style property, set from the style panel.
+#[derive(Clone, Debug, PartialEq)]
+pub enum StyleChange {
+    /// Outline color.
+    StrokeColor(String),
+    /// Fill color, or `transparent`.
+    BackgroundColor(String),
+    /// Fill pattern.
+    FillStyle(FillStyle),
+    /// Outline width.
+    StrokeWidth(f64),
+    /// Outline dash pattern.
+    StrokeStyle(StrokeStyle),
+    /// Sloppiness; also draws a new seed, like Excalidraw.
+    Roughness(f64),
+    /// Opacity from 0 to 100.
+    Opacity(f64),
+    /// Round (true) or sharp edges.
+    RoundEdges(bool),
+    /// Arrowhead at an arrow's first point.
+    StartArrowhead(Option<Arrowhead>),
+    /// Arrowhead at an arrow's last point.
+    EndArrowhead(Option<Arrowhead>),
+    /// Font size.
+    FontSize(f64),
+    /// Excalidraw font id.
+    FontFamily(u32),
+    /// Horizontal text alignment.
+    TextAlign(TextAlign),
+}
+
+impl Style {
+    /// Applies a change to the style for new elements.
+    pub(crate) fn apply(&mut self, change: &StyleChange) {
+        match change.clone() {
+            StyleChange::StrokeColor(color) => self.stroke_color = color,
+            StyleChange::BackgroundColor(color) => self.background_color = color,
+            StyleChange::FillStyle(fill) => self.fill_style = fill,
+            StyleChange::StrokeWidth(width) => self.stroke_width = width,
+            StyleChange::StrokeStyle(style) => self.stroke_style = style,
+            StyleChange::Roughness(roughness) => self.roughness = roughness,
+            StyleChange::Opacity(opacity) => self.opacity = opacity,
+            StyleChange::RoundEdges(round) => self.round_edges = round,
+            StyleChange::StartArrowhead(head) => self.start_arrowhead = head,
+            StyleChange::EndArrowhead(head) => self.end_arrowhead = head,
+            StyleChange::FontSize(size) => self.font_size = size,
+            StyleChange::FontFamily(family) => self.font_family = family,
+            StyleChange::TextAlign(align) => self.text_align = align,
+        }
+    }
+
+    /// Returns this style with the first selected element's values, so the
+    /// panel shows what is selected.
+    pub(crate) fn of(&self, element: &crate::scene::Element) -> Self {
+        use crate::scene::Kind;
+        let base = &element.base;
+        let mut style = Self {
+            stroke_color: base.stroke_color.clone(),
+            background_color: base.background_color.clone(),
+            fill_style: base.fill_style.clone(),
+            stroke_width: base.stroke_width,
+            stroke_style: base.stroke_style.clone(),
+            roughness: base.roughness,
+            opacity: base.opacity,
+            round_edges: base.roundness.is_some(),
+            ..self.clone()
+        };
+        match &element.kind {
+            Kind::Arrow(line) => {
+                style.round_arrows = base.roundness.is_some();
+                style.start_arrowhead = line.start_arrowhead.clone();
+                style.end_arrowhead = line.end_arrowhead.clone();
+            }
+            Kind::Text(text) => {
+                style.font_size = text.font_size;
+                style.font_family = text.font_family;
+                style.text_align = text.text_align.clone();
+            }
+            _ => {}
+        }
+        style
+    }
+}
