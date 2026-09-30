@@ -2,8 +2,8 @@
 //! tools across the top, style options down the left. Values follow
 //! REFERENCE-001 section 14.
 use iced::widget::{
-    Column, button, column, container, opaque, pick_list, row, slider, space, text, text_input,
-    themer, tooltip,
+    Column, button, column, container, opaque, pick_list, row, slider, text, text_input, themer,
+    tooltip,
 };
 use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
@@ -490,7 +490,7 @@ fn arrowheads(style: &Style) -> Element<'static, Message> {
     )
     .on_select(|head: Head| Message(Input::Style(StyleChange::EndArrowhead(head.0))))
     .text_size(12);
-    row![start, end, space::horizontal()].spacing(4).into()
+    row![start, end].spacing(4).into()
 }
 
 fn panel_style(theme: &Theme) -> container::Style {

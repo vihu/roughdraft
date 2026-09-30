@@ -358,3 +358,36 @@ fn every_tool_draws_mid_gesture() {
         draw(&sketch);
     }
 }
+
+#[test]
+fn the_style_panel_keeps_its_width_with_arrowhead_choices() {
+    // The arrowhead row once ended in a `Fill` space, which stretched the
+    // whole panel across the window whenever arrow options showed.
+    let mut sketch = Sketch::new(Scene::default());
+    sketch.set_appearance(roughdraft::widget::Appearance::Dark);
+    run(&mut sketch, |ui| {
+        let _ = ui.tap_key(iced::keyboard::Key::Character("a".into()));
+    });
+    let path = std::env::temp_dir().join(format!("roughdraft-panel-{}", std::process::id()));
+    let mut ui =
+        iced_test::Simulator::with_size(iced::Settings::default(), (800.0, 600.0), sketch.view());
+    let snapshot = ui.snapshot(&iced::Theme::Dark).unwrap();
+    assert!(snapshot.matches_image(&path).unwrap());
+    let png = std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|p| {
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                n.starts_with(&format!("roughdraft-panel-{}-", std::process::id()))
+            })
+        })
+        .expect("the snapshot PNG");
+    let image = image::open(&png).unwrap().into_rgba8();
+    let _ = std::fs::remove_file(&png);
+    let (w, h) = image.dimensions();
+    // Right of where the panel ends: canvas, like the canvas above the panel.
+    let canvas = image.get_pixel(w * 7 / 8, h * 40 / 600);
+    let beside_panel = image.get_pixel(w * 7 / 8, h * 300 / 600);
+    assert_eq!(canvas, beside_panel);
+}
