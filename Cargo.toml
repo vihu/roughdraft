@@ -1,15 +1,27 @@
 [package]
-description  = "Excalidraw-compatible hand-drawn sketch canvas for iced"
+description            = "Excalidraw-compatible hand-drawn sketch canvas for iced"
+edition.workspace      = true
+license.workspace      = true
+name                   = "roughdraft"
+publish                = false
+rust-version.workspace = true
+version.workspace      = true
+
+[workspace]
+members = ["app"]
+
+[workspace.package]
 edition      = "2024"
 license      = "MIT"
-name         = "roughdraft"
-publish      = false
 rust-version = "1.93"
 version      = "0.1.0"
 
-[dependencies]
+[workspace.dependencies]
 # Pinned iced master; bump only at milestone boundaries.
-iced       = { git = "https://github.com/iced-rs/iced", rev = "90dec30cc7368c3fbaac69790e43a4b08a21691d", features = ["advanced", "canvas", "image"] }
+iced = { git = "https://github.com/iced-rs/iced", rev = "90dec30cc7368c3fbaac69790e43a4b08a21691d", features = ["advanced", "canvas", "image"] }
+
+[dependencies]
+iced       = { workspace = true }
 # Reads pasted and inserted image sizes, encodes pasted images as PNG (iced already depends on it).
 image      = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 # Exact pin: seed parity with rough.js 4.6.4 is guarded by tests/rough_parity.rs.
@@ -20,9 +32,7 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 
 [dev-dependencies]
-# Headless rendering for the playground's --snapshot; same rev as iced.
+# Headless rendering for widget tests and the snapshot example; same rev as iced.
 iced_test = { git = "https://github.com/iced-rs/iced", rev = "90dec30cc7368c3fbaac69790e43a4b08a21691d" }
-# Open/save dialogs in the playground (XDG portal on Linux).
-rfd       = "0.17"
 # Reads Excalidraw's reference SVGs in tests/svg_parity.rs.
 roxmltree = "0.21"

@@ -3163,10 +3163,19 @@ dependencies = [
  "iced",
  "iced_test",
  "image",
- "rfd",
  "rough-rs",
  "roxmltree 0.21.1",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "roughdraft-app"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "rfd",
+ "roughdraft",
  "serde_json",
 ]
 

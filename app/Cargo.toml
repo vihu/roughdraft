@@ -1,0 +1,21 @@
+[package]
+description            = "A hand-drawn sketch editor for Excalidraw files"
+edition.workspace      = true
+license.workspace      = true
+name                   = "roughdraft-app"
+publish                = false
+rust-version.workspace = true
+version.workspace      = true
+
+[[bin]]
+# Its docs would collide with the library's, which share the name.
+doc  = false
+name = "roughdraft"
+path = "src/main.rs"
+
+[dependencies]
+iced       = { workspace = true }
+# Open and save dialogs (XDG portal on Linux).
+rfd        = "0.17"
+roughdraft = { path = ".." }
+serde_json = "1"

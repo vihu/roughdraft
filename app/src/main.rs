@@ -1,15 +1,16 @@
-//! Playground: open, edit and save `.excalidraw` files.
+//! roughdraft: a desktop editor for `.excalidraw` files.
 //!
 //! ```text
-//! cargo run --release --example playground -- [file]
-//! cargo run --release --example playground -- <file> --snapshot out.png [--dark] [--origin x,y]
+//! roughdraft [file.excalidraw] [--dark]
+//! cargo run --release -p roughdraft-app -- [file.excalidraw] [--dark]
 //! ```
 //!
 //! Keys follow Excalidraw:
 //!
 //! - Files: the menu in the top-left corner (open, save, save as, export
-//!   SVG, insert image, dark/light), or Ctrl+O open, Ctrl+S save (asks where
-//!   for new files), Ctrl+Shift+S save as, 9 insert an image file. The title shows `*` while there are unsaved changes.
+//!   SVG, insert image, dark/light), or Ctrl+O open, Ctrl+S save (asks
+//!   where for new files), Ctrl+Shift+S save as, 9 insert an image file.
+//!   The title shows `*` while there are unsaved changes.
 //! - Tools: V or 1 select, H hand, R or 2 rectangle, D or 3 diamond, O or 4
 //!   ellipse, A or 5 arrow, L or 6 line, T or 8 text, E or 0 eraser (drag
 //!   across elements; Alt un-marks), F frame (takes in what is wholly
@@ -33,12 +34,6 @@
 //! - View: Space-drag, middle-drag or the scroll wheel pan; Ctrl+scroll
 //!   zooms; Ctrl+= / Ctrl+- / Ctrl+0 step and reset the zoom; Shift+1 fits
 //!   everything, Shift+2 / Shift+3 the selection; Alt+Shift+D dark mode.
-//!
-//! `--snapshot` renders headlessly at 100% zoom and writes
-//! `out-<renderer>.png` (2x pixel density) instead of opening a window.
-//! The content is centred, as when a file opens; `--origin` sets the scene
-//! point at the top-left instead, e.g. to line up with an Excalidraw SVG
-//! export (its first `translate`, negated).
 use std::path::PathBuf;
 
 use iced::keyboard::{self, key};
@@ -48,70 +43,29 @@ use roughdraft::scene::Scene;
 use roughdraft::svg::{self, SvgOptions};
 use roughdraft::widget::{self, Appearance, Request, Sketch};
 
-const USAGE: &str =
-    "usage: playground [file.excalidraw] [--snapshot out.png] [--dark] [--origin x,y]";
-
-/// Snapshot size in logical pixels.
-const SNAPSHOT_SIZE: (f32, f32) = (1024.0, 768.0);
-
 pub fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let file = args
         .first()
         .filter(|a| !a.starts_with("--"))
         .map(PathBuf::from);
-    let snapshot = args
-        .iter()
-        .position(|a| a == "--snapshot")
-        .and_then(|i| args.get(i + 1));
     let appearance = if args.iter().any(|a| a == "--dark") {
         Appearance::Dark
     } else {
         Appearance::Light
     };
-    // `--origin x,y` or `--origin=x,y` (the second form keeps a negative x
-    // from reading as a flag).
-    let origin = args
-        .iter()
-        .position(|a| a == "--origin")
-        .and_then(|i| args.get(i + 1).map(String::as_str))
-        .or_else(|| args.iter().find_map(|a| a.strip_prefix("--origin=")))
-        .map(|xy| {
-            let (x, y) = xy.split_once(',').expect("--origin takes x,y");
-            [x.parse().expect("origin x"), y.parse().expect("origin y")]
-        });
-
-    if let Some(png) = snapshot {
-        let result = file
-            .ok_or_else(|| USAGE.to_owned())
-            .and_then(|f| load(&f))
-            .and_then(|scene| {
-                let mut sketch = Sketch::new(scene);
-                sketch.set_appearance(appearance);
-                if let Some(origin) = origin {
-                    sketch.set_origin(origin);
-                }
-                write_snapshot(&sketch, png)
-            });
-        if let Err(error) = result {
-            eprintln!("{error}");
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
     iced::application(
-        move || Playground::open(file.clone(), appearance),
-        Playground::update,
-        Playground::view,
+        move || App::open(file.clone(), appearance),
+        App::update,
+        App::view,
     )
-    .title(Playground::title)
+    .title(App::title)
     .fonts(roughdraft::fonts::ALL)
-    .subscription(Playground::subscription)
+    .subscription(App::subscription)
     .run()
 }
 
-struct Playground {
+struct App {
     /// Where Ctrl+S writes; `None` for a new scene.
     path: Option<PathBuf>,
     sketch: Sketch,
@@ -139,7 +93,7 @@ enum Message {
     Exported(Result<Option<PathBuf>, String>),
 }
 
-impl Playground {
+impl App {
     fn open(file: Option<PathBuf>, appearance: Appearance) -> Self {
         let (scene, path, error) = match file.as_deref().map(load) {
             None => (Scene::default(), None, None),
@@ -175,7 +129,7 @@ impl Playground {
             "*"
         };
         format!(
-            "{}{unsaved} - roughdraft playground",
+            "{}{unsaved} - roughdraft",
             name.as_deref().unwrap_or("untitled")
         )
     }
@@ -183,7 +137,7 @@ impl Playground {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Sketch(message) => {
-                // A main menu item: the playground carries it out.
+                // A main menu item: the app carries it out.
                 let request = message.request().map(|request| match request {
                     Request::Open => Message::Open,
                     Request::Save => Message::Save { choose: false },
@@ -337,33 +291,4 @@ async fn export_svg(name: String, image: String) -> Result<Option<PathBuf>, Stri
     let path = file.path().to_owned();
     std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(Some(path))
-}
-
-fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {
-    let settings = iced::Settings {
-        fonts: roughdraft::fonts::ALL.map(Into::into).to_vec(),
-        ..iced::Settings::default()
-    };
-    let mut simulator = iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, sketch.canvas());
-    let snapshot = simulator
-        .snapshot(&iced::Theme::Light)
-        .map_err(|e| e.to_string())?;
-    // `matches_image` writes the PNG when none exists yet.
-    let stem = std::path::Path::new(png.trim_end_matches(".png"));
-    let dir = stem
-        .parent()
-        .filter(|d| !d.as_os_str().is_empty())
-        .unwrap_or(std::path::Path::new("."));
-    let prefix = format!(
-        "{}-",
-        stem.file_name().unwrap_or_default().to_string_lossy()
-    );
-    for old in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let name = old.file_name().to_string_lossy().into_owned();
-        if name.starts_with(&prefix) && name.ends_with(".png") {
-            std::fs::remove_file(old.path()).map_err(|e| e.to_string())?;
-        }
-    }
-    snapshot.matches_image(png).map_err(|e| e.to_string())?;
-    Ok(())
 }

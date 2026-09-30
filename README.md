@@ -13,7 +13,7 @@ in excalidraw.com unchanged, and the other way round.
   edited, tested and exported to SVG without a window.
 
 Status: 0.1.0, not published. Targets Linux (Wayland) and macOS. It is both
-a library for iced apps and, through the playground, a standalone editor.
+a library for iced apps and a standalone editor (the `roughdraft` app).
 
 ## Embedding
 
@@ -104,15 +104,16 @@ dropped on or leave the one they were dragged out of. Not supported: embeds, las
 kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
 bundled and render in the system sans or monospace font.
 
-## Playground
+## The app
 
 ```text
-cargo run --release --example playground -- [scene.excalidraw]
+cargo run --release -p roughdraft-app -- [scene.excalidraw] [--dark]
 ```
 
-Opens, edits and saves `.excalidraw` files, with Excalidraw's shortcuts. See
-the top of `examples/playground.rs` for keys and the headless `--snapshot`
-mode.
+`roughdraft`, the desktop editor in `app/`: opens, edits, saves and exports
+`.excalidraw` files, with Excalidraw's shortcuts and a main menu. See the top
+of `app/src/main.rs` for keys. `cargo run --release --example snapshot`
+renders a scene headlessly to a PNG.
 
 ## How it is checked
 
