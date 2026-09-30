@@ -282,3 +282,79 @@ fn the_wheel_scrolls_like_iced_scrollables() {
     });
     assert!(!sketch.editor().is_selected("box"));
 }
+
+#[test]
+fn frames_draw_while_a_shape_is_being_dragged() {
+    // The overlay asks for binding suggestions on every frame; a drag of a
+    // plain shape once panicked there.
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(480.0, 345.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        let to = Point::new(500.0, 360.0);
+        ui.point_at(to);
+        ui.simulate([Event::Mouse(mouse::Event::CursorMoved { position: to })]);
+    });
+    assert!(!sketch.editor().active().is_empty(), "still dragging");
+    let mut ui =
+        iced_test::Simulator::with_size(iced::Settings::default(), (800.0, 600.0), sketch.view());
+    ui.snapshot(&iced::Theme::Light).expect("a frame mid-drag");
+}
+
+#[test]
+fn every_tool_draws_mid_gesture() {
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    let draw = |sketch: &Sketch| {
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            (800.0, 600.0),
+            sketch.view(),
+        );
+        ui.snapshot(&iced::Theme::Light).expect("a frame");
+    };
+    // Tool key, press, drag to: shapes, lines, frame, eraser across the
+    // box, a box select, and a move of the box. Each session is fresh, so
+    // the press and the draw happen in separate ones.
+    for (key, from, to) in [
+        ("r", (100.0, 100.0), (200.0, 180.0)),
+        ("d", (100.0, 250.0), (200.0, 320.0)),
+        ("o", (250.0, 100.0), (330.0, 180.0)),
+        ("a", (100.0, 450.0), (470.0, 340.0)),
+        ("l", (600.0, 100.0), (700.0, 200.0)),
+        ("f", (50.0, 50.0), (350.0, 400.0)),
+        ("e", (380.0, 280.0), (580.0, 400.0)),
+        ("v", (20.0, 500.0), (60.0, 560.0)),
+        ("v", (480.0, 345.0), (500.0, 360.0)),
+    ] {
+        let (from, to) = (Point::new(from.0, from.1), Point::new(to.0, to.1));
+        run(&mut sketch, |ui| {
+            ui.point_at(from);
+            let _ = ui.tap_key(iced::keyboard::Key::Character(key.into()));
+            ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+            let mid = Point::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0);
+            for at in [mid, to] {
+                ui.point_at(at);
+                ui.simulate([Event::Mouse(mouse::Event::CursorMoved { position: at })]);
+            }
+        });
+        // The tool's gesture is live: drawing, erasing or box selecting.
+        let editor = sketch.editor();
+        assert!(
+            !editor.active().is_empty()
+                || editor.marquee().is_some()
+                || editor.pending_erasure().is_some(),
+            "{key}"
+        );
+        draw(&sketch);
+        // A release in a new session is not the same press, so Escape ends
+        // the gesture (a command abandons it).
+        run(&mut sketch, |ui| {
+            let _ = ui.tap_key(iced::keyboard::key::Named::Escape);
+        });
+        draw(&sketch);
+    }
+}

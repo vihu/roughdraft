@@ -40,6 +40,7 @@ impl Editor {
             Command::PasteStyles => self.paste_styles(),
             Command::Tool(tool) => {
                 self.tool = tool;
+                self.editing_group = None;
                 if tool != Tool::Selection {
                     self.selected.clear();
                 }
@@ -87,12 +88,14 @@ impl Editor {
                 if self.history.undo(&mut self.scene.elements) {
                     self.prune_selection();
                     self.prune_line_edit();
+                    self.prune_editing_group();
                 }
             }
             Command::Redo => {
                 if self.history.redo(&mut self.scene.elements) {
                     self.prune_selection();
                     self.prune_line_edit();
+                    self.prune_editing_group();
                 }
             }
             Command::Reorder(order) => self.reorder(order),

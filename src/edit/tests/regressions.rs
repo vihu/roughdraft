@@ -396,3 +396,67 @@ fn the_text_tool_edits_free_text_it_clicks() {
     );
     assert_eq!(editor.scene().elements.len(), 1);
 }
+
+#[test]
+fn the_entered_group_ends_with_a_tool_change_and_bounds_z_order_steps() {
+    let alt = Modifiers { alt: true, ..NONE };
+    // A tool change leaves the entered group: a new rectangle then steps
+    // back past the whole group.
+    let mut editor = grouped();
+    editor.double_click([250.0, 25.0]);
+    editor.command(Command::Tool(Tool::Rectangle));
+    drag(&mut editor, [700.0, 0.0], [800.0, 50.0], NONE);
+    editor.command(Command::Reorder(crate::edit::Order::Backward));
+    let ids = order(&editor);
+    let rect = ids
+        .iter()
+        .position(|id| !["x", "g1", "g2"].contains(&id.as_str()));
+    assert_eq!(rect, Some(1), "{ids:?}");
+
+    // In an entered group, a copy on top steps back to just below its
+    // sibling, past nothing else.
+    let mut editor = grouped();
+    editor.double_click([250.0, 25.0]);
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], NONE);
+    drag(&mut editor, [250.0, 25.0], [255.0, 25.0], alt);
+    editor.command(Command::Reorder(crate::edit::Order::Backward));
+    let ids = order(&editor);
+    assert_eq!(
+        (ids[0].as_str(), ids[1].as_str(), ids[3].as_str()),
+        ("x", "g1", "g2"),
+        "{ids:?}"
+    );
+}
+
+#[test]
+fn an_alt_dragged_bound_arrow_stays_bound() {
+    let alt = Modifiers { alt: true, ..NONE };
+    let mut editor = editor();
+    drag(&mut editor, [150.0, 0.0], [150.0, 0.0], NONE);
+    drag(&mut editor, [150.0, 0.0], [150.0, 3.0], alt);
+    let last = editor.scene().elements.len() - 1;
+    assert!(matches!(editor.scene().elements[last].kind, Kind::Arrow(_)));
+    assert_eq!(end_binding(&editor, last).as_deref(), Some("b"));
+}
+
+#[test]
+fn free_text_pulled_past_one_side_keeps_growing() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [0.0, 0.0], [0.0, 0.0], NONE);
+    editor.set_text("hi");
+    editor.finish_text();
+    let se = editor
+        .handles()
+        .unwrap()
+        .handles
+        .iter()
+        .find(|(h, _)| *h == Handle::Se)
+        .unwrap()
+        .1;
+    drag(&mut editor, se, [-5.0, 200.0], NONE);
+    let Kind::Text(text) = &editor.scene().elements[0].kind else {
+        panic!("text")
+    };
+    assert!(text.font_size > 20.0, "{}", text.font_size);
+}

@@ -249,7 +249,12 @@ impl Editor {
 
     /// Sets one end's binding to `target` (or none), keeping both sides'
     /// `boundElements` in step (`bindLinearElement`, `unbindLinearElement`).
-    fn set_arrow_binding(&mut self, index: usize, end: ArrowEnd, target: Option<String>) {
+    pub(super) fn set_arrow_binding(
+        &mut self,
+        index: usize,
+        end: ArrowEnd,
+        target: Option<String>,
+    ) {
         let arrow = &self.scene.elements[index];
         let arrow_id = arrow.base.id.clone();
         let previous = arrow.binding(end).map(|b| b.element_id);

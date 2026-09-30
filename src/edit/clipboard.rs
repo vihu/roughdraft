@@ -55,6 +55,7 @@ impl Editor {
     /// Returns `false` when there is nothing to paste.
     pub fn paste(&mut self, text: &str, at: Point) -> bool {
         self.settle();
+        self.editing_group = None;
         let value = serde_json::from_str::<Value>(text.trim()).unwrap_or_default();
         if !value["type"]
             .as_str()
@@ -128,6 +129,7 @@ impl Editor {
         at: Point,
     ) -> String {
         self.settle();
+        self.editing_group = None;
         let before = self.scene.elements.clone();
         let file_id = crate::random::id();
         self.scene.insert_file(&file_id, mime, data_url);

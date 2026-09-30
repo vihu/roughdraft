@@ -54,16 +54,20 @@ impl Editor {
         if bounds[2] == bounds[0] && bounds[3] == bounds[1] {
             return;
         }
-        // Free text stops at font size 1 and at its opposite corner
-        // (`resizeSingleTextElement`).
+        // Free text scales by the larger of the two axis ratios and stops
+        // at font size 1 (`resizeSingleTextElement`): past its opposite
+        // corner on both axes it stops, on one it keeps growing unflipped.
         if let Kind::Text(text) = &original.kind {
+            let flipped = [bounds[2] < bounds[0], bounds[3] < bounds[1]];
+            if flipped == [true, true] {
+                return;
+            }
+            if flipped.contains(&true) {
+                bounds = unflip(bounds, frame.bounds, handle);
+            }
             let [x1, _, x2, _] = frame.bounds;
             let size = text.font_size * (bounds[2] - bounds[0]) / (x2 - x1);
-            if bounds[2] < bounds[0]
-                || bounds[3] < bounds[1]
-                || size.is_nan()
-                || size < MIN_FONT_SIZE
-            {
+            if size.is_nan() || size < MIN_FONT_SIZE {
                 return;
             }
         }
@@ -385,6 +389,25 @@ impl Editor {
             }
         }
     }
+}
+
+/// A resized box with both extents positive, kept against the sides the
+/// handle does not drag (of `original`).
+fn unflip(bounds: Bounds, original: Bounds, handle: Handle) -> Bounds {
+    let (moves_left, moves_right, moves_top, moves_bottom) = edges(handle);
+    let (w, h) = ((bounds[2] - bounds[0]).abs(), (bounds[3] - bounds[1]).abs());
+    let [ox1, oy1, ox2, oy2] = original;
+    let (x1, x2) = match (moves_left, moves_right) {
+        (true, false) => (ox2 - w, ox2),
+        (false, true) => (ox1, ox1 + w),
+        _ => (bounds[0].min(bounds[2]), bounds[0].max(bounds[2])),
+    };
+    let (y1, y2) = match (moves_top, moves_bottom) {
+        (true, false) => (oy2 - h, oy2),
+        (false, true) => (oy1, oy1 + h),
+        _ => (bounds[1].min(bounds[3]), bounds[1].max(bounds[3])),
+    };
+    [x1, y1, x2, y2]
 }
 
 /// Grows a resized box to at least `min` wide and high from the sides the

@@ -132,6 +132,17 @@ impl Editor {
         limit.checked_sub(1).map(|i| groups[i].to_owned())
     }
 
+    /// Leaves the entered group once no live element is in it (after undo).
+    pub(super) fn prune_editing_group(&mut self) {
+        let gone = self
+            .editing_group
+            .as_deref()
+            .is_some_and(|g| self.group_members(g).next().is_none());
+        if gone {
+            self.editing_group = None;
+        }
+    }
+
     /// Group ids copies keep (`getNewGroupIdsForDuplication`): the entered
     /// group and the groups around it, mapped to themselves; groups inside
     /// it get new ids.

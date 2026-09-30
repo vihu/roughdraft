@@ -68,6 +68,7 @@ fn session(seed: u64) {
                 editor.pointer(Pointer::Down, from, modifiers);
                 for _ in 0..1 + rng.below(3) {
                     editor.pointer(Pointer::Move, rng.point(), modifiers);
+                    frame_queries(&editor);
                 }
                 editor.pointer(Pointer::Up, rng.point(), modifiers);
             }
@@ -79,6 +80,7 @@ fn session(seed: u64) {
                 editor.pointer(Pointer::Down, rng.point(), modifiers);
                 for _ in 0..rng.below(4) {
                     editor.pointer(Pointer::Move, rng.point(), modifiers);
+                    frame_queries(&editor);
                 }
                 editor.pointer(Pointer::Up, rng.point(), modifiers);
             }
@@ -153,7 +155,19 @@ fn session(seed: u64) {
 
 /// Cross-checks the scene's references; with `full`, also saves, reloads
 /// and renders it.
+/// What the widget asks the editor on every drawn frame; mid-gesture too.
+fn frame_queries(editor: &Editor) {
+    let _ = editor.active();
+    let _ = editor.handles();
+    let _ = editor.binding_suggestions();
+    let _ = editor.marquee();
+    let _ = editor.pending_erasure();
+    let _ = editor.selected_groups();
+    let _ = editor.editing_line();
+}
+
 fn check(editor: &Editor, seed: u64, step: usize, full: bool) {
+    frame_queries(editor);
     let at = format!("seed {seed}, step {step}");
     let saved = editor.scene().saved();
     if full {

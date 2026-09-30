@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use super::{Editor, Gesture, Modifiers, common_bounds, normalize};
 use crate::geometry::{self, Point};
 use crate::hit::{self, container_id};
-use crate::scene::{Element, Kind};
+use crate::scene::{ArrowEnd, Element, Kind};
 
 impl Editor {
     /// Whether `at` is inside the selection's box, padded by the threshold:
@@ -141,6 +141,19 @@ impl Editor {
         let first = self.scene.elements.len();
         self.scene.elements.extend(copies);
         self.exclude_framed_from_selection();
+        // The dragged copies keep the originals' bindings to shapes that
+        // were not copied (`fixBindingsAfterDuplication`); `remap` cleared
+        // them.
+        for (k, &(original, _)) in starts.iter().enumerate() {
+            for end in [ArrowEnd::Start, ArrowEnd::End] {
+                let Some(binding) = self.scene.elements[original].binding(end) else {
+                    continue;
+                };
+                if !ids.contains_key(&binding.element_id) {
+                    self.set_arrow_binding(first + k, end, Some(binding.element_id));
+                }
+            }
+        }
         if let Some(Gesture::Move { starts: moving, .. }) = &mut self.gesture {
             *moving = (first..)
                 .zip(starts.iter().map(|(_, start)| *start))

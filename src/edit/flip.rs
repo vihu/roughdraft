@@ -80,7 +80,7 @@ impl Editor {
             .collect();
         self.sync_labels(&labels);
         for &i in &indices {
-            self.bind_arrow_ends(i);
+            self.rebind_moved_arrow(i);
         }
         self.update_bound_arrows(&flipped);
         self.history.record(before);

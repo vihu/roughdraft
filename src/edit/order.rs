@@ -90,21 +90,32 @@ fn step(units: &mut Vec<Unit>, direction: Direction, entered: Option<&str>) {
         if !units[start].selected || !units[start].visible {
             continue;
         }
+        // In an entered group only its members count as neighbours
+        // (`indexFilter`), whatever lies between them.
+        let candidate = |i: &usize| {
+            units[*i].visible && entered.is_none_or(|g| units[*i].groups.iter().any(|x| x == g))
+        };
         let next = match direction {
-            Direction::Up => (start + 1..units.len()).find(|&i| units[i].visible),
-            Direction::Down => (0..start).rev().find(|&i| units[i].visible),
+            Direction::Up => (start + 1..units.len()).find(candidate),
+            Direction::Down => (0..start).rev().find(candidate),
         };
         let Some(mut target) = next.filter(|&i| !units[i].selected) else {
             continue;
         };
+        // A neighbour in a group of its own is passed as a whole; a sibling
+        // in the same group is just stepped over (`getTargetIndex`).
         let groups = &units[target].groups;
-        let sibling = match entered {
-            Some(entered) => match groups.iter().position(|g| g == entered) {
-                Some(at) => at.checked_sub(1).map(|i| groups[i].clone()),
-                // The neighbour is outside the entered group.
-                None => continue,
-            },
-            None => groups.last().cloned(),
+        let sibling = if *groups == units[start].groups {
+            None
+        } else {
+            match entered {
+                Some(entered) => groups
+                    .iter()
+                    .position(|g| g == entered)
+                    .and_then(|at| at.checked_sub(1))
+                    .map(|i| groups[i].clone()),
+                None => groups.last().cloned(),
+            }
         };
         if let Some(group) = sibling {
             let mut members = (0..units.len()).filter(|&i| units[i].groups.contains(&group));
