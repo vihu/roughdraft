@@ -6,20 +6,27 @@
 //! cargo run --release --example playground -- <file> --snapshot out.png [--dark] [--origin x,y]
 //! ```
 //!
-//! Ctrl+O opens, Ctrl+S saves (Save As when the file is new or a Keeprs memo),
-//! Ctrl+Shift+S saves as, Alt+Shift+D toggles dark mode. The canvas follows
-//! Excalidraw's shortcuts: V selection, H hand, R rectangle, D diamond,
-//! O ellipse, A arrow, L line (drag, or click point by point and finish with
-//! Enter, Escape or a second click), T text (click a shape to label it;
-//! double-click or Enter edits text; Escape or Ctrl+Enter finishes), Q keeps
-//! the tool, Space or middle-drag
-//! pans, Ctrl+scroll zooms (Ctrl+= / Ctrl+- / Ctrl+0 step and reset,
-//! Shift+1 fits everything, Shift+2 / Shift+3 the selection), Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
-//! arrow keys nudge, Ctrl+[ / Ctrl+] (with Shift: to back / front) reorder,
-//! Ctrl+G / Ctrl+Shift+G group, Ctrl+Shift+< / > text size, Alt+drag
-//! duplicates. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
-//! format, so shapes paste between this and excalidraw.com; a copied image
-//! pastes as an image. 9 inserts an image file.
+//! Keys follow Excalidraw:
+//!
+//! - Files: Ctrl+O open, Ctrl+S save (asks where for new files and Keeprs
+//!   memos), Ctrl+Shift+S save as, 9 insert an image file. The title shows
+//!   `*` while there are unsaved changes.
+//! - Tools: V or 1 select, H hand, R or 2 rectangle, D or 3 diamond, O or 4
+//!   ellipse, A or 5 arrow, L or 6 line, T or 8 text; Q keeps the tool.
+//!   Lines and arrows: drag, or click point by point and finish with Enter,
+//!   Escape or a click on the last point. Text: click a shape to label it;
+//!   double-click or Enter edits; Escape or Ctrl+Enter finishes.
+//! - Edit: Delete, Ctrl+D duplicate, Alt+drag duplicate, Ctrl+A select all,
+//!   Ctrl+Z / Ctrl+Shift+Z undo and redo, arrow keys nudge (Shift: 5),
+//!   Ctrl+[ / Ctrl+] one step back or forward (with Shift: to back or
+//!   front), Ctrl+G / Ctrl+Shift+G group and ungroup, Ctrl+Shift+< / >
+//!   text size.
+//! - Clipboard: Ctrl+C / Ctrl+X / Ctrl+V in Excalidraw's format, so shapes
+//!   paste between this and excalidraw.com; a copied image pastes as an
+//!   image.
+//! - View: Space-drag, middle-drag or the scroll wheel pan; Ctrl+scroll
+//!   zooms; Ctrl+= / Ctrl+- / Ctrl+0 step and reset the zoom; Shift+1 fits
+//!   everything, Shift+2 / Shift+3 the selection; Alt+Shift+D dark mode.
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.

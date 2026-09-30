@@ -65,11 +65,43 @@ fn unknown_enum_values_round_trip() {
 }
 
 #[test]
-fn missing_required_field_is_rejected() {
-    let input =
-        format!(r#"{{"id":"r","type":"rectangle",{BASE}}}"#).replace(r#""seed":1968410193,"#, "");
-    let err = serde_json::from_str::<Element>(&input).unwrap_err();
-    assert!(err.to_string().contains("missing field `seed`"), "{err}");
+fn legacy_fields_take_excalidraw_restore_defaults_and_still_round_trip() {
+    let input = r#"{"id":"r","type":"rectangle","x":1,"y":2,"width":30,"height":40,"strokeWidth":0,"strokeSharpness":"round","boundElementIds":["a"]}"#;
+    let element: Element = serde_json::from_str(input).unwrap();
+    let b = &element.base;
+    assert_eq!(
+        (b.seed, b.stroke_width, b.opacity, b.roughness, b.angle),
+        (1, 2.0, 100.0, 1.0, 0.0)
+    );
+    assert_eq!(
+        (b.stroke_color.as_str(), b.background_color.as_str()),
+        ("#1e1e1e", "transparent")
+    );
+    assert_eq!(
+        b.roundness.as_ref().map(|r| r.kind),
+        Some(1),
+        "legacy radius for rectangles"
+    );
+    assert_eq!(b.bound_elements.as_ref().unwrap()[0].id, "a");
+
+    let text = r#"{"id":"t","type":"text","x":0,"y":0,"width":50,"height":60,"text":"a\nb","fontSize":20}"#;
+    let element: Element = serde_json::from_str(text).unwrap();
+    let Kind::Text(text) = &element.kind else {
+        panic!("text")
+    };
+    assert_eq!(
+        text.line_height, 1.5,
+        "detected from the stored height: 60 / 2 lines / 20"
+    );
+    assert_eq!(text.font_family, 5);
+
+    // Saving writes the restored fields, like Excalidraw's save.
+    let scene = format!(r#"{{"type":"excalidraw","elements":[{input}]}}"#);
+    let parsed: Scene = serde_json::from_str(&scene).unwrap();
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap()["elements"][0]["seed"],
+        1
+    );
 }
 
 #[test]

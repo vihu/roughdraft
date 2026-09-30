@@ -46,15 +46,7 @@ const MIN_TEXT_WIDTH: f64 = 2.0 * PADDING;
 /// labels the shape (`TEXT_TO_CENTER_SNAP_THRESHOLD`).
 const CENTER_SNAP: f64 = 30.0;
 
-/// Line height per em for Excalidraw fonts (`FONT_METADATA`).
-pub(super) fn line_height(font_family: u32) -> f64 {
-    match font_family {
-        6 => 1.35,
-        3 => 1.2,
-        2 | 7 | 9 => 1.15,
-        _ => 1.25,
-    }
-}
+pub(super) use crate::scene::line_height;
 
 // Public API
 impl Editor {
