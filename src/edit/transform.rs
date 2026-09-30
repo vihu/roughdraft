@@ -279,6 +279,7 @@ impl Editor {
                 } else {
                     self.resize_many(&start, &frame, handle, at, modifiers);
                 }
+                self.update_bound_arrows(&ids(&start));
                 self.gesture = Some(Gesture::Resize {
                     handle,
                     before,
@@ -299,6 +300,7 @@ impl Editor {
                     angle -= angle % LOCK_ANGLE;
                 }
                 self.rotate(&start, center, angle);
+                self.update_bound_arrows(&ids(&start));
                 self.gesture = Some(Gesture::Rotate {
                     before,
                     start,
@@ -335,4 +337,8 @@ impl Editor {
             .map(|(i, _)| i)
             .collect()
     }
+}
+
+fn ids(start: &[(usize, Element)]) -> std::collections::HashSet<String> {
+    start.iter().map(|(_, e)| e.base.id.clone()).collect()
 }

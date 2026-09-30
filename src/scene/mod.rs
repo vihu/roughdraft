@@ -444,6 +444,11 @@ fn write_back(json: &mut Map<String, Value>, typed: &impl Serialize) {
     }
 }
 
+/// A number spelled the way `JSON.stringify` spells it.
+fn js_number(value: f64) -> Value {
+    js_numbers(serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number))
+}
+
 /// Spells whole floats as integers, the way `JSON.stringify` does.
 fn js_numbers(value: Value) -> Value {
     /// Largest magnitude where every integer is exact in an f64 (2^53).
@@ -469,6 +474,8 @@ fn js_numbers(value: Value) -> Value {
 
 mod new;
 mod refs;
+
+pub use self::refs::{ArrowEnd, Binding};
 
 #[cfg(test)]
 mod tests;

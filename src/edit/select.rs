@@ -114,9 +114,14 @@ impl Editor {
                     .iter()
                     .map(|&(i, [x, y])| (i, [x + offset[0], y + offset[1]]))
                     .collect();
+                let moved: HashSet<String> = targets
+                    .iter()
+                    .map(|(i, _)| self.scene.elements[*i].base.id.clone())
+                    .collect();
                 for (i, position) in targets {
                     self.place(i, position);
                 }
+                self.update_bound_arrows(&moved);
                 true
             }
             Some(Gesture::Marquee { from, to, keep }) => {
@@ -147,8 +152,15 @@ impl Editor {
             Some(Gesture::Move {
                 before,
                 moved: true,
+                starts,
                 ..
-            }) => self.history.record(before),
+            }) => {
+                // Dragged arrows bind to, or leave, the shapes they now touch.
+                for (index, _) in starts {
+                    self.bind_arrow_ends(index);
+                }
+                self.history.record(before);
+            }
             Some(Gesture::Move {
                 clicked: Some(id), ..
             }) => {
@@ -156,11 +168,13 @@ impl Editor {
                 self.expand_to_groups();
             }
             Some(Gesture::Move { .. } | Gesture::Marquee { .. }) => {}
-            Some(
-                Gesture::Resize { before, .. }
-                | Gesture::Rotate { before, .. }
-                | Gesture::Endpoint { before, .. },
-            ) => {
+            Some(Gesture::Endpoint { index, before, .. }) => {
+                self.bind_arrow_ends(index);
+                if before != self.scene.elements {
+                    self.history.record(before);
+                }
+            }
+            Some(Gesture::Resize { before, .. } | Gesture::Rotate { before, .. }) => {
                 if before != self.scene.elements {
                     self.history.record(before);
                 }

@@ -306,7 +306,7 @@ pub(crate) fn is_loop(points: &[Point]) -> bool {
 }
 
 /// `getCornerRadius`.
-fn corner_radius(x: f64, roundness: &Roundness) -> f64 {
+pub(crate) fn corner_radius(x: f64, roundness: &Roundness) -> f64 {
     const LEGACY: u8 = 1;
     const PROPORTIONAL_RADIUS: u8 = 2;
     const ADAPTIVE_RADIUS: u8 = 3;

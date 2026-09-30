@@ -154,6 +154,7 @@ fn delete_drops_bindings_and_saves_without_tombstones() {
     assert!(!editor.scene().elements[1].base.is_deleted);
 }
 
+mod binding;
 mod clipboard;
 mod create;
 mod order;

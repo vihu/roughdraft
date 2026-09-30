@@ -282,6 +282,7 @@ impl Editor {
     /// Records a finished drawing, selects it, and returns to the selection
     /// tool unless the tool is locked.
     fn finish(&mut self, index: usize, before: Vec<Element>) {
+        self.bind_arrow_ends(index);
         self.history.record(before);
         self.selected = HashSet::from([self.scene.elements[index].base.id.clone()]);
         if !self.locked {

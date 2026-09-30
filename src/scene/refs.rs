@@ -5,7 +5,66 @@ use serde_json::Value;
 
 use super::{Element, Kind};
 
+/// One end of an arrow attached to a shape (`PointBinding`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Binding {
+    /// The shape the arrow end is attached to.
+    pub element_id: String,
+    /// Where the arrow's line passes the shape, from -1 to 1 relative to
+    /// its centre.
+    pub focus: f64,
+    /// Distance from the shape's outline to the arrow end.
+    pub gap: f64,
+}
+
+/// An end of a line or arrow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArrowEnd {
+    /// The first point (`startBinding`).
+    Start,
+    /// The last point (`endBinding`).
+    End,
+}
+
+impl ArrowEnd {
+    fn key(self) -> &'static str {
+        match self {
+            ArrowEnd::Start => "startBinding",
+            ArrowEnd::End => "endBinding",
+        }
+    }
+}
+
 impl Element {
+    /// Returns the binding at one end of an arrow.
+    pub fn binding(&self, end: ArrowEnd) -> Option<Binding> {
+        let binding = self.json.get(end.key())?;
+        Some(Binding {
+            element_id: binding.get("elementId")?.as_str()?.to_owned(),
+            focus: binding.get("focus").and_then(Value::as_f64).unwrap_or(0.0),
+            gap: binding.get("gap").and_then(Value::as_f64).unwrap_or(0.0),
+        })
+    }
+
+    /// Sets or clears the binding at one end. Other keys of an existing
+    /// binding object (such as an elbow arrow's `fixedPoint`) are kept.
+    pub fn set_binding(&mut self, end: ArrowEnd, binding: Option<Binding>) {
+        let value = match (binding, self.json.get(end.key()).cloned()) {
+            (None, _) => Value::Null,
+            (Some(b), existing) => {
+                let mut object = match existing {
+                    Some(Value::Object(object)) => object,
+                    _ => serde_json::Map::new(),
+                };
+                object.insert("elementId".into(), b.element_id.into());
+                object.insert("focus".into(), super::js_number(b.focus));
+                object.insert("gap".into(), super::js_number(b.gap));
+                Value::Object(object)
+            }
+        };
+        self.json.insert(end.key().into(), value);
+    }
+
     /// Points this copy's references at other copies, after the caller gave
     /// every copied element a new id (`ids`, old to new).
     ///

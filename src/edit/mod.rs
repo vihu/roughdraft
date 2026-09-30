@@ -3,6 +3,7 @@
 //! The widget converts input to scene coordinates and calls [`Editor`]; every
 //! interaction is testable without a window. Behaviour follows Excalidraw
 //! 0.18 as recorded in `.ai-docs/REFERENCE-001-excalidraw-editing-spec.md`.
+mod binding;
 mod clipboard;
 mod commands;
 mod create;
@@ -268,7 +269,7 @@ impl Editor {
                     ..
                 }),
                 _,
-            ) => starts.iter().map(|(i, _)| id(*i)).collect(),
+            ) => self.with_bound_arrows(starts.iter().map(|(i, _)| id(*i)).collect()),
             (
                 Some(
                     Gesture::Shape { index, .. }
@@ -278,7 +279,7 @@ impl Editor {
                 _,
             ) => vec![id(*index)],
             (Some(Gesture::Resize { start, .. } | Gesture::Rotate { start, .. }), _) => {
-                start.iter().map(|(i, _)| id(*i)).collect()
+                self.with_bound_arrows(start.iter().map(|(i, _)| id(*i)).collect())
             }
             _ => Vec::new(),
         }
@@ -381,9 +382,15 @@ impl Editor {
             Command::Nudge(offset) => {
                 if !self.selected.is_empty() {
                     self.history.record(self.scene.elements.clone());
-                    for (i, [x, y]) in self.moving() {
+                    let moving = self.moving();
+                    let moved = moving
+                        .iter()
+                        .map(|(i, _)| self.scene.elements[*i].base.id.clone())
+                        .collect();
+                    for (i, [x, y]) in moving {
                         self.place(i, [x + offset[0], y + offset[1]]);
                     }
+                    self.update_bound_arrows(&moved);
                 }
             }
         }
@@ -392,6 +399,17 @@ impl Editor {
 
 // Private API
 impl Editor {
+    /// `ids` plus the arrows bound to them, which move with them.
+    fn with_bound_arrows<'a>(&'a self, ids: Vec<&'a str>) -> Vec<&'a str> {
+        let set: HashSet<&str> = ids.iter().copied().collect();
+        let arrows: Vec<&str> = self
+            .arrows_bound_to(&set)
+            .into_iter()
+            .filter(|a| !set.contains(a))
+            .collect();
+        ids.into_iter().chain(arrows).collect()
+    }
+
     fn threshold(&self) -> f64 {
         hit::THRESHOLD / self.zoom
     }
