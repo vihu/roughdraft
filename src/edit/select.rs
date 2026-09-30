@@ -72,6 +72,9 @@ impl Editor {
                 }
                 self.selected.insert(id);
                 self.expand_to_groups();
+                // A frame and its children are never selected together
+                // (`App.tsx` shift-click on frames and framed elements).
+                self.exclude_framed_from_selection();
                 None
             }
             None => {
@@ -242,6 +245,7 @@ impl Editor {
             }
             Some(Gesture::Resize { before, .. } | Gesture::Rotate { before, .. }) => {
                 if before != self.scene.elements {
+                    self.refit_selected_frames();
                     self.history.record(before);
                 }
             }

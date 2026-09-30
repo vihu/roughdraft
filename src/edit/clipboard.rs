@@ -99,7 +99,9 @@ impl Editor {
             .filter(|e| container_id(e).is_none())
             .map(|e| e.base.id.clone())
             .collect::<HashSet<_>>();
+        let pasted: HashSet<String> = elements.iter().map(|e| e.base.id.clone()).collect();
         self.scene.elements.extend(elements);
+        self.paste_into_frame(at, &pasted);
         self.exclude_framed_from_selection();
         true
     }

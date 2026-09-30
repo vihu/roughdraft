@@ -212,3 +212,66 @@ fn frame_children_follow_excalidraws_selection_and_clipping_rules() {
     let handles = editor.handles().unwrap();
     assert!(handles.handles.iter().all(|(h, _)| *h != Handle::Rotation));
 }
+
+#[test]
+fn frames_refit_on_resize_take_pastes_and_stay_apart_from_their_children() {
+    let shift = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    let se = |editor: &Editor| {
+        editor
+            .handles()
+            .unwrap()
+            .handles
+            .iter()
+            .find(|(h, _)| *h == Handle::Se)
+            .unwrap()
+            .1
+    };
+    let mut editor = editor();
+    // Shift-clicking a child of the selected frame leaves the selection.
+    click(&mut editor, [0.5, 100.0]);
+    drag(&mut editor, [100.0, 100.0], [100.0, 100.0], shift);
+    let selected: Vec<_> = editor.selection().map(|e| e.base.id.as_str()).collect();
+    assert_eq!(selected, ["one"]);
+
+    // Growing frame one over the free diamond takes it in; shrinking it
+    // to 30 high lets go of what no longer overlaps it.
+    let corner = se(&editor);
+    drag(
+        &mut editor,
+        corner,
+        [corner[0], corner[1] + 150.0],
+        Modifiers::default(),
+    );
+    assert_eq!(get(&editor, "free").frame_id(), Some("one"));
+    let corner = se(&editor);
+    drag(&mut editor, corner, [corner[0], 34.0], Modifiers::default());
+    assert_eq!(get(&editor, "inside").frame_id(), None);
+    assert_eq!(get(&editor, "free").frame_id(), None);
+    assert_eq!(get(&editor, "note").frame_id(), Some("one"));
+    editor.command(Command::Undo);
+    assert_eq!(get(&editor, "inside").frame_id(), Some("one"), "one step");
+
+    // A paste onto a frame lands in it.
+    let mut editor = self::editor();
+    click(&mut editor, [150.0, 260.0]);
+    let copied = editor.copy().unwrap();
+    click(&mut editor, [700.0, 500.0]);
+    assert!(editor.paste(&copied, [150.0, 100.0]));
+    assert_eq!(editor.selection().next().unwrap().frame_id(), Some("one"));
+
+    // Dragging a frame along with other elements puts nothing in a frame.
+    let mut editor = self::editor();
+    click(&mut editor, [380.5, 75.0]);
+    assert!(editor.is_selected("two"));
+    drag(&mut editor, [150.0, 260.0], [150.0, 260.0], shift);
+    drag(
+        &mut editor,
+        [150.0, 260.0],
+        [90.0, 110.0],
+        Modifiers::default(),
+    );
+    assert_eq!(get(&editor, "free").frame_id(), None);
+}
