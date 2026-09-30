@@ -41,7 +41,10 @@ impl Editor {
         if !hit.as_ref().is_some_and(inside_group) {
             self.editing_group = None;
         }
-        let grab_selection = !modifiers.shift && self.in_selection(at);
+        // A wholly locked selection cannot be dragged; the press goes
+        // through to what is under it.
+        let grab_selection =
+            !modifiers.shift && self.in_selection(at) && self.selection().any(|e| !e.is_locked());
         let clicked = match hit {
             Some(id) if modifiers.shift && self.selected.contains(&id) => {
                 // Shift-click takes the element's whole group out.

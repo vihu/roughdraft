@@ -89,6 +89,10 @@ impl Editor {
         if self.text.is_some() || !matches!(self.gesture, None | Some(Gesture::Resize { .. })) {
             return None;
         }
+        // A locked selection shows its border only (`getTransformHandles`).
+        if self.selection().all(Element::is_locked) {
+            return None;
+        }
         let points = self.line_points().unwrap_or_default();
         let editing_line = self.line_edit.is_some();
         // A 2-point line or the line editor shows only points

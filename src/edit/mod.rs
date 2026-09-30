@@ -149,6 +149,9 @@ pub enum Command {
     PasteStyles,
     /// Mirrors the selection (Shift+H, Shift+V).
     Flip(Axis),
+    /// Locks the selection, or unlocks it when all of it is locked; with
+    /// nothing selected, unlocks every element (Ctrl+Shift+L).
+    ToggleElementLock,
 }
 
 #[derive(Debug)]
@@ -399,6 +402,7 @@ impl Editor {
             Command::EditLine => self.enter_line_editor(),
             Command::CopyStyles => self.copy_styles(),
             Command::Flip(axis) => self.flip(axis),
+            Command::ToggleElementLock => self.toggle_element_lock(),
             Command::PasteStyles => self.paste_styles(),
             Command::Tool(tool) => {
                 self.tool = tool;

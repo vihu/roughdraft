@@ -25,7 +25,8 @@
 //!   Ctrl+[ / Ctrl+] one step back or forward (with Shift: to back or
 //!   front), Ctrl+G / Ctrl+Shift+G group and ungroup, Ctrl+Shift+< / >
 //!   text size, Ctrl+Alt+C / Ctrl+Alt+V copy and paste styles, Shift+H /
-//!   Shift+V flip.
+//!   Shift+V flip, Ctrl+Shift+L lock or unlock (nothing selected: unlock
+//!   all).
 //! - Clipboard: Ctrl+C / Ctrl+X / Ctrl+V in Excalidraw's format, so shapes
 //!   paste between this and excalidraw.com; a copied image pastes as an
 //!   image.

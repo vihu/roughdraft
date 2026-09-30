@@ -43,6 +43,7 @@ pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Comm
             ("d", true) => Some(Command::Duplicate),
             ("a", true) => Some(Command::SelectAll),
             ("g", true) if shift => Some(Command::Ungroup),
+            ("l", true) if shift => Some(Command::ToggleElementLock),
             // `,` and `.` for layouts where Shift does not make `<` and `>`.
             ("<" | ",", true) if shift => Some(Command::SmallerFont),
             (">" | ".", true) if shift => Some(Command::LargerFont),
@@ -107,6 +108,10 @@ mod tests {
             Some(Command::Redo)
         );
         assert_eq!(shortcut(&key("d"), ctrl), Some(Command::Duplicate));
+        assert_eq!(
+            shortcut(&key("L"), ctrl | Modifiers::SHIFT),
+            Some(Command::ToggleElementLock)
+        );
         assert_eq!(
             shortcut(&key("d"), Modifiers::empty()),
             Some(Command::Tool(Tool::Diamond))

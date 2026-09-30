@@ -228,6 +228,44 @@ fn locked_elements_are_drawn_but_not_selectable() {
 }
 
 #[test]
+fn element_lock_toggles_and_unlocks_everything_with_nothing_selected() {
+    let json = format!(
+        r##"{{"type":"excalidraw","elements":[
+            {{"id":"under","type":"rectangle","x":0,"backgroundColor":"#a5d8ff","boundElements":null,{BASE}}},
+            {{"id":"lock","type":"rectangle","x":0,"backgroundColor":"#a5d8ff","boundElements":null,"locked":true,{BASE}}}
+        ]}}"##
+    );
+    let mut editor = Editor::new(serde_json::from_str::<Scene>(&json).unwrap());
+    let click =
+        |editor: &mut Editor| drag(editor, [50.0, 25.0], [50.0, 25.0], Modifiers::default());
+    click(&mut editor);
+    editor.command(Command::ToggleElementLock);
+    assert!(editor.scene().elements[0].is_locked());
+    assert!(
+        editor.handles().is_none(),
+        "a locked selection has no handles"
+    );
+    click(&mut editor);
+    assert_eq!(editor.selection().count(), 0, "both are locked now");
+
+    editor.command(Command::ToggleElementLock);
+    assert!(editor.scene().elements.iter().all(|e| !e.is_locked()));
+    assert!(editor.is_selected("under") && editor.is_selected("lock"));
+    editor.command(Command::ToggleElementLock);
+    assert!(
+        editor.scene().elements.iter().all(|e| e.is_locked()),
+        "a selection with nothing locked locks"
+    );
+    editor.command(Command::Undo);
+    assert!(editor.scene().elements.iter().all(|e| !e.is_locked()));
+    editor.command(Command::Undo);
+    assert!(
+        editor.scene().elements.iter().all(|e| e.is_locked()),
+        "each toggle is one undo step"
+    );
+}
+
+#[test]
 fn eraser_drag_marks_then_deletes_with_labels_and_alt_unmarks() {
     let mut editor = editor();
     editor.command(Command::Tool(crate::edit::Tool::Eraser));

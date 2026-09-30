@@ -105,6 +105,7 @@ fn session(seed: u64) {
                 Command::Flip(Axis::Horizontal),
                 Command::Flip(Axis::Vertical),
                 Command::ToggleLock,
+                Command::ToggleElementLock,
                 Command::Escape,
                 Command::Finish,
                 Command::Delete,

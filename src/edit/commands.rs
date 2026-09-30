@@ -1,4 +1,4 @@
-//! Delete and duplicate (REFERENCE-001 sections 7-8).
+//! Delete, duplicate (REFERENCE-001 sections 7-8) and element locks.
 use std::collections::{HashMap, HashSet};
 
 use super::{Editor, Tool};
@@ -39,6 +39,47 @@ impl Editor {
         }
         self.selected.clear();
         self.tool = Tool::Selection;
+    }
+
+    /// Locks the selection with its labels unless all of it is already
+    /// locked, then unlocks it (`actionToggleElementLock`). With nothing
+    /// selected, unlocks every element and selects them
+    /// (`actionUnlockAllElements`, which Excalidraw offers in its context
+    /// menu; there is no context menu here).
+    pub(super) fn toggle_element_lock(&mut self) {
+        let unlock_all = self.selected.is_empty();
+        let targets: Vec<usize> = if unlock_all {
+            self.scene
+                .elements
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| e.is_locked() && !e.base.is_deleted)
+                .map(|(i, _)| i)
+                .collect()
+        } else {
+            self.moving().into_iter().map(|(i, _)| i).collect()
+        };
+        if targets.is_empty() {
+            return;
+        }
+        let lock = !unlock_all && targets.iter().all(|&i| !self.scene.elements[i].is_locked());
+        self.history.record(self.scene.elements.clone());
+        for &i in &targets {
+            let element = &mut self.scene.elements[i];
+            element.json_mut().insert("locked".into(), lock.into());
+            element.touch();
+        }
+        if lock {
+            self.line_edit = None;
+        }
+        if unlock_all {
+            self.selected = targets
+                .iter()
+                .map(|&i| &self.scene.elements[i])
+                .filter(|e| container_id(e).is_none())
+                .map(|e| e.base.id.clone())
+                .collect();
+        }
     }
 
     /// Duplicates the selection with its labels. Each copy goes right after
