@@ -135,3 +135,21 @@ fn label_alignment_shows_and_changes_through_its_shape() {
     // b spans 200..300; left-aligned labels sit 5 in from the edge.
     assert_eq!(label.base.x, 205.0);
 }
+
+#[test]
+fn arrow_type_curves_arrows_and_edges_leave_them_alone() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
+    let roundness = |editor: &Editor, i: usize| editor.scene().elements[i].base.roundness.clone();
+    assert!(roundness(&editor, 0).is_some(), "curved by default");
+    // Selected after drawing: Edges does nothing to it, Arrow type does.
+    editor.apply_style(StyleChange::RoundEdges(false));
+    assert!(roundness(&editor, 0).is_some());
+    editor.apply_style(StyleChange::RoundArrows(false));
+    assert_eq!(roundness(&editor, 0), None);
+    // And new arrows follow the choice.
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [0.0, 100.0], [100.0, 100.0], NONE);
+    assert_eq!(roundness(&editor, 1), None);
+}

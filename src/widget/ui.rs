@@ -12,6 +12,7 @@ use super::icons::{Glyph, icon};
 use super::{Appearance, Input, Message, Sketch};
 use crate::color::Rgba;
 use crate::edit::{Command, Style, StyleChange, Tool};
+use crate::render::is_transparent;
 use crate::scene::{Arrowhead, FillStyle, Kind, StrokeStyle, TextAlign};
 
 /// A colour the style panel edits as text.
@@ -229,7 +230,20 @@ impl Sketch {
             "Stroke",
             self.colors(&STROKES, &style.stroke_color, ColorField::Stroke),
         )];
-        if shapes {
+        // Background only for what can be filled (`hasBackground`), and the
+        // fill style only once that background is not transparent
+        // (`showFillIcons`): arrows and text get neither.
+        let fillable = |kind: &Kind| {
+            matches!(
+                kind,
+                Kind::Rectangle | Kind::Diamond | Kind::Ellipse | Kind::Line(_)
+            ) || matches!(kind, Kind::Other(k) if k == "freedraw")
+        };
+        let tool_fills = matches!(
+            tool,
+            Tool::Rectangle | Tool::Diamond | Tool::Ellipse | Tool::Line
+        );
+        if tool_fills || selected.iter().any(|e| fillable(&e.kind)) {
             sections.push(section(
                 "Background",
                 self.colors(
@@ -238,6 +252,12 @@ impl Sketch {
                     ColorField::Background,
                 ),
             ));
+        }
+        let filled = (tool_fills && !is_transparent(&style.background_color))
+            || selected
+                .iter()
+                .any(|e| fillable(&e.kind) && !is_transparent(&e.base.background_color));
+        if filled {
             let fills = [
                 (FillStyle::Hachure, "Hachure"),
                 (FillStyle::CrossHatch, "Cross-hatch"),
@@ -253,6 +273,8 @@ impl Sketch {
                 )
             });
             sections.push(section("Fill", self.icon_choices(fills)));
+        }
+        if shapes {
             let widths = [(1, "Thin"), (2, "Bold"), (4, "Extra bold")].map(|(width, name)| {
                 let active = style.stroke_width == f64::from(width);
                 (
@@ -289,18 +311,35 @@ impl Sketch {
                     )
                 });
             sections.push(section("Sloppiness", self.icon_choices(roughness)));
-            let edges = [(false, "Sharp"), (true, "Round")].map(|(round, name)| {
-                let active = style.round_edges == round;
-                (
-                    Glyph::Edges { round },
-                    name,
-                    active,
-                    StyleChange::RoundEdges(round),
-                )
-            });
-            sections.push(section("Edges", self.icon_choices(edges)));
+            // Edges only where roundness applies (`canChangeRoundness`);
+            // arrows have their own type.
+            let edged = matches!(tool, Tool::Rectangle | Tool::Diamond | Tool::Line)
+                || has(|k| matches!(k, Kind::Rectangle | Kind::Diamond | Kind::Line(_)))
+                || has(|k| matches!(k, Kind::Other(kind) if kind == "image"));
+            if edged {
+                let edges = [(false, "Sharp"), (true, "Round")].map(|(round, name)| {
+                    let active = style.round_edges == round;
+                    (
+                        Glyph::Edges { round },
+                        name,
+                        active,
+                        StyleChange::RoundEdges(round),
+                    )
+                });
+                sections.push(section("Edges", self.icon_choices(edges)));
+            }
         }
         if arrows {
+            let types = [(false, "Sharp"), (true, "Curved")].map(|(round, name)| {
+                let active = style.round_arrows == round;
+                (
+                    Glyph::ArrowType { round },
+                    name,
+                    active,
+                    StyleChange::RoundArrows(round),
+                )
+            });
+            sections.push(section("Arrow type", self.icon_choices(types)));
             // One list per end, stacked, so the panel keeps its width.
             let (start, end) = arrowheads(&style);
             sections.push(section("Start arrowhead", start));

@@ -444,3 +444,51 @@ fn the_main_menu_asks_the_host_and_switches_the_theme() {
     });
     assert_eq!(sketch.appearance(), roughdraft::widget::Appearance::Dark);
 }
+
+#[test]
+fn background_and_fill_show_only_where_a_fill_can_be_drawn() {
+    // `hasBackground`, `showFillIcons`: arrows get neither; a rectangle gets
+    // Background, and Fill once its background is not transparent.
+    let sections =
+        |sketch: &mut Sketch,
+         act: &dyn Fn(&mut iced_test::Simulator<'_, roughdraft::widget::Message>)| {
+            run(sketch, |ui| act(ui));
+            let mut ui = iced_test::Simulator::with_size(
+                iced::Settings::default(),
+                (800.0, 900.0),
+                sketch.view(),
+            );
+            ["Background", "Fill", "Arrow type", "Edges"].map(|name| ui.find(name).is_ok())
+        };
+    let tool = |key: &'static str| {
+        move |ui: &mut iced_test::Simulator<'_, roughdraft::widget::Message>| {
+            let _ = ui.tap_key(iced::keyboard::Key::Character(key.into()));
+        }
+    };
+    let mut empty = Sketch::new(Scene::default());
+    assert_eq!(
+        sections(&mut empty, &tool("a")),
+        [false, false, true, false],
+        "arrow"
+    );
+    let mut empty = Sketch::new(Scene::default());
+    assert_eq!(
+        sections(&mut empty, &tool("r")),
+        [true, false, false, true],
+        "rectangle"
+    );
+
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut filled = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    filled.set_origin([0.0, 0.0]);
+    let select = |ui: &mut iced_test::Simulator<'_, roughdraft::widget::Message>| {
+        ui.point_at(Point::new(480.0, 345.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    };
+    assert_eq!(
+        sections(&mut filled, &select),
+        [true, true, false, true],
+        "filled box"
+    );
+}

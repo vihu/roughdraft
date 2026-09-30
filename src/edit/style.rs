@@ -101,8 +101,11 @@ pub enum StyleChange {
     Roughness(f64),
     /// Opacity from 0 to 100.
     Opacity(f64),
-    /// Round (true) or sharp edges.
+    /// Round (true) or sharp edges of rectangles, diamonds, lines and
+    /// images (`changeRoundness`).
     RoundEdges(bool),
+    /// Curved (true) or sharp arrows (`changeArrowType`).
+    RoundArrows(bool),
     /// Arrowhead at an arrow's first point.
     StartArrowhead(Option<Arrowhead>),
     /// Arrowhead at an arrow's last point.
@@ -127,6 +130,7 @@ impl Style {
             StyleChange::Roughness(roughness) => self.roughness = roughness,
             StyleChange::Opacity(opacity) => self.opacity = opacity,
             StyleChange::RoundEdges(round) => self.round_edges = round,
+            StyleChange::RoundArrows(round) => self.round_arrows = round,
             StyleChange::StartArrowhead(head) => self.start_arrowhead = head,
             StyleChange::EndArrowhead(head) => self.end_arrowhead = head,
             StyleChange::FontSize(size) => self.font_size = size,

@@ -74,6 +74,18 @@ impl Editor {
                     };
                     element.base.roundness = round.then_some(Roundness { kind, value: None });
                 }
+                (StyleChange::RoundEdges(round), Kind::Other(kind)) if kind == "image" => {
+                    element.base.roundness = round.then_some(Roundness {
+                        kind: ADAPTIVE,
+                        value: None,
+                    });
+                }
+                (StyleChange::RoundArrows(round), Kind::Arrow(_)) => {
+                    element.base.roundness = round.then_some(Roundness {
+                        kind: PROPORTIONAL,
+                        value: None,
+                    });
+                }
                 (StyleChange::StartArrowhead(head), Kind::Arrow(line)) => {
                     line.start_arrowhead = head.clone()
                 }

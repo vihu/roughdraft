@@ -279,7 +279,8 @@ impl Rng {
             ])),
             5 => StyleChange::Roughness(self.pick(&[0.0, 1.0, 2.0])),
             6 => StyleChange::Opacity(self.pick(&[10.0, 60.0, 100.0])),
-            7 => StyleChange::RoundEdges(self.below(2) == 0),
+            7 if self.below(2) == 0 => StyleChange::RoundEdges(self.below(2) == 0),
+            7 => StyleChange::RoundArrows(self.below(2) == 0),
             8 => StyleChange::EndArrowhead(self.pick(&[
                 None,
                 Some(Arrowhead::Arrow),

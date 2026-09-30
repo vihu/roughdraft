@@ -29,6 +29,10 @@ pub(super) enum Glyph {
     Align(TextAlign),
     /// The main menu button: three lines.
     Menu,
+    /// Sharp or curved arrow type.
+    ArrowType {
+        round: bool,
+    },
 }
 
 /// An icon drawn in `color`.
@@ -217,6 +221,14 @@ impl canvas::Program<Message> for Icon {
                 })
             } else {
                 polyline(&[(4.0, 16.0), (4.0, 4.0), (16.0, 4.0)], false)
+            }],
+            Glyph::ArrowType { round } => vec![if round {
+                Path::new(|path| {
+                    path.move_to(Point::new(4.0, 16.0));
+                    path.quadratic_curve_to(Point::new(5.0, 5.0), Point::new(16.0, 4.0));
+                })
+            } else {
+                polyline(&[(4.0, 16.0), (9.0, 6.0), (16.0, 4.0)], false)
             }],
             Glyph::Menu => [5.0, 10.0, 15.0]
                 .into_iter()
