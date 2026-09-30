@@ -155,6 +155,15 @@ fn inserted_image_file_lands_centred_in_the_view_as_a_data_url() {
         .file_data_url(image.file_id().unwrap())
         .unwrap();
     assert!(url.starts_with("data:image/png;base64,iVBOR"), "{url}");
+
+    // A picture taller than half the 600 px view is shown 300 high.
+    png.clear();
+    image::RgbaImage::new(1000, 800)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    sketch.insert_image(&png).unwrap();
+    let image = sketch.scene().elements.last().unwrap();
+    assert_eq!((image.base.width, image.base.height), (375.0, 300.0));
 }
 
 #[test]

@@ -53,8 +53,8 @@ impl Sketch {
             iced::Rectangle::with_size(viewport),
             iced::Point::new(viewport.width / 2.0, viewport.height / 2.0),
         );
-        self.editor
-            .insert_image(url, mime, [f64::from(width), f64::from(height)], at);
+        let size = self.fit_image([f64::from(width), f64::from(height)]);
+        self.editor.insert_image(url, mime, size, at);
         self.refresh();
         Ok(())
     }
@@ -62,6 +62,17 @@ impl Sketch {
 
 // Private API
 impl Sketch {
+    /// A new picture's size in scene units (`initializeImageDimensions`): its
+    /// natural size, at most half the view high at the current zoom, and at
+    /// most the view less 120 px (but not under 160) whatever the zoom.
+    pub(super) fn fit_image(&self, [width, height]: [f64; 2]) -> [f64; 2] {
+        let view = f64::from(self.viewport.get().height);
+        let zoom = self.camera.get().zoom;
+        let max = (view - 120.0).max(160.0).min((view * 0.5).floor() / zoom);
+        let fitted = height.min(max);
+        [fitted * (width / height), fitted]
+    }
+
     /// Draws a decoded image, or a grey placeholder while it is missing.
     /// Images keep their colors in dark mode, like Excalidraw's.
     pub(super) fn draw_image(

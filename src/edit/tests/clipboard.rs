@@ -87,7 +87,7 @@ fn plain_text_pastes_as_a_centred_text_element() {
 }
 
 #[test]
-fn inserted_image_fits_600_renders_exports_and_prunes_on_save() {
+fn inserted_image_takes_its_size_renders_exports_and_prunes_on_save() {
     let mut editor = editor();
     let url = "data:image/png;base64,TWFu".to_owned();
     let id = editor.insert_image(url.clone(), "image/png", [1200.0, 300.0], [0.0, 0.0]);
@@ -99,14 +99,14 @@ fn inserted_image_fits_600_renders_exports_and_prunes_on_save() {
             image.base.width,
             image.base.height
         ),
-        (-300.0, -75.0, 600.0, 150.0)
+        (-600.0, -150.0, 1200.0, 300.0)
     );
     assert!(editor.is_selected(&id));
     let file_id = image.file_id().unwrap().to_owned();
     assert_eq!(editor.scene().file_data_url(&file_id), Some(url.as_str()));
     let drawing = crate::render::render_element(image, "#ffffff").unwrap();
     assert!(
-        matches!(&drawing.items[..], [crate::render::Item::Image { size, .. }] if *size == [600.0, 150.0])
+        matches!(&drawing.items[..], [crate::render::Item::Image { size, .. }] if *size == [1200.0, 300.0])
     );
     let svg = crate::svg::export(editor.scene(), &crate::svg::SvgOptions::default());
     assert!(

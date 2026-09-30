@@ -280,12 +280,8 @@ impl Sketch {
             Input::PastedImage(at, width, height, rgba) => {
                 if let Some(png) = encode_png(width, height, rgba.to_vec()) {
                     let url = format!("data:image/png;base64,{}", crate::base64::encode(&png));
-                    self.editor.insert_image(
-                        url,
-                        "image/png",
-                        [f64::from(width), f64::from(height)],
-                        at,
-                    );
+                    let size = self.fit_image([f64::from(width), f64::from(height)]);
+                    self.editor.insert_image(url, "image/png", size, at);
                 }
                 Task::none()
             }

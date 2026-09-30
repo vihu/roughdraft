@@ -104,13 +104,15 @@ impl Editor {
     }
 }
 
-/// Longest side of a newly inserted image, in scene units.
-// ponytail: fixed cap; Excalidraw fits new images to half the viewport height
-const INSERTED_IMAGE_MAX: f64 = 600.0;
-
 impl Editor {
-    /// Inserts an image centred on `at`, sized to its natural `size` (capped),
-    /// storing `data_url` in the scene's files. Returns the element id.
+    /// Inserts an image of `size` scene units centred on `at`, storing
+    /// `data_url` in the scene's files. Returns the element id.
+    ///
+    /// Fitting a picture to the view is the caller's: [`Sketch`] follows
+    /// Excalidraw and shows it at its natural size, at most half the view
+    /// high.
+    ///
+    /// [`Sketch`]: crate::widget::Sketch
     pub fn insert_image(
         &mut self,
         data_url: String,
@@ -122,8 +124,7 @@ impl Editor {
         let before = self.scene.elements.clone();
         let file_id = crate::random::id();
         self.scene.insert_file(&file_id, mime, data_url);
-        let scale = (INSERTED_IMAGE_MAX / size[0].max(size[1])).min(1.0);
-        let (width, height) = (size[0] * scale, size[1] * scale);
+        let [width, height] = size;
         let mut base = self.style.base([at[0] - width / 2.0, at[1] - height / 2.0]);
         base.width = width;
         base.height = height;
