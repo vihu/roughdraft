@@ -71,6 +71,8 @@ impl Editor {
         self.finish_multi();
         let target = self.hit(at).map(|e| e.base.id.clone());
         match target {
+            // A grouped element: the first double-click enters its group.
+            Some(id) if self.enter_group(&id) => {}
             Some(id) => {
                 self.selected = std::iter::once(id.clone()).collect();
                 self.edit_element(&id, at);

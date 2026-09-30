@@ -14,7 +14,8 @@
 //! double-click or Enter edits text; Escape or Ctrl+Enter finishes), Q keeps
 //! the tool, Space or middle-drag
 //! pans, Ctrl+scroll zooms, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
-//! arrow keys nudge. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
+//! arrow keys nudge, Ctrl+[ / Ctrl+] (with Shift: to back / front) reorder,
+//! Ctrl+G / Ctrl+Shift+G group. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
 //! format, so shapes paste between this and excalidraw.com.
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes

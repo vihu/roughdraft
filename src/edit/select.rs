@@ -28,10 +28,36 @@ impl Editor {
             return;
         }
         let hit = self.hit(at).map(|e| e.base.id.clone());
+        // Clicking outside the entered group leaves it.
+        let inside_group = |id: &String| {
+            let entered = self.editing_group.as_deref();
+            self.scene
+                .elements
+                .iter()
+                .any(|e| &e.base.id == id && entered.is_some_and(|g| e.group_ids().contains(&g)))
+        };
+        if !hit.as_ref().is_some_and(inside_group) {
+            self.editing_group = None;
+        }
         let grab_selection = !modifiers.shift && self.in_selection(at);
         let clicked = match hit {
             Some(id) if modifiers.shift && self.selected.contains(&id) => {
-                self.selected.remove(&id);
+                // Shift-click takes the element's whole group out.
+                let element = self.scene.elements.iter().find(|e| e.base.id == id);
+                let group = element.and_then(|e| self.selection_group(e));
+                let members: Vec<String> = match group {
+                    Some(g) => self
+                        .scene
+                        .elements
+                        .iter()
+                        .filter(|e| e.group_ids().contains(&g.as_str()))
+                        .map(|e| e.base.id.clone())
+                        .collect(),
+                    None => vec![id],
+                };
+                for member in members {
+                    self.selected.remove(&member);
+                }
                 return;
             }
             _ if grab_selection => hit.filter(|id| self.selected.contains(id)),
@@ -40,6 +66,7 @@ impl Editor {
                     self.selected.clear();
                 }
                 self.selected.insert(id);
+                self.expand_to_groups();
                 None
             }
             None => {
@@ -107,6 +134,7 @@ impl Editor {
                 });
                 selected.extend(inside.map(|e| e.base.id.clone()));
                 self.selected = selected;
+                self.expand_to_groups();
                 true
             }
             _ => false,
@@ -123,7 +151,10 @@ impl Editor {
             }) => self.history.record(before),
             Some(Gesture::Move {
                 clicked: Some(id), ..
-            }) => self.selected = HashSet::from([id]),
+            }) => {
+                self.selected = HashSet::from([id]);
+                self.expand_to_groups();
+            }
             Some(Gesture::Move { .. } | Gesture::Marquee { .. }) => {}
             Some(
                 Gesture::Resize { before, .. }

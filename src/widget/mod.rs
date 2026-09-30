@@ -17,7 +17,7 @@ use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
 use crate::color::Rgba;
-use crate::edit::{self, Command, Editor, Pointer, Tool};
+use crate::edit::{self, Command, Editor, Order, Pointer, Tool};
 use crate::geometry::{self, Affine};
 use crate::render::{self, Drawing, Item, Segment};
 use crate::scene::Scene;
@@ -360,6 +360,13 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
             ("y", true) => Some(Command::Redo),
             ("d", true) => Some(Command::Duplicate),
             ("a", true) => Some(Command::SelectAll),
+            ("g", true) if shift => Some(Command::Ungroup),
+            ("g", true) => Some(Command::Group),
+            // Shift turns the brackets into braces on most layouts.
+            ("[" | "{", true) if shift => Some(Command::Reorder(Order::ToBack)),
+            ("[", true) => Some(Command::Reorder(Order::Backward)),
+            ("]" | "}", true) if shift => Some(Command::Reorder(Order::ToFront)),
+            ("]", true) => Some(Command::Reorder(Order::Forward)),
             (_, true) => None,
             _ if alt => None,
             ("v" | "1", _) => Some(Command::Tool(Tool::Selection)),

@@ -61,6 +61,12 @@ impl Element {
         }
     }
 
+    /// Replaces the groups this element belongs to, innermost first.
+    pub fn set_group_ids(&mut self, ids: Vec<String>) {
+        let ids = ids.into_iter().map(Value::String).collect();
+        self.json.insert("groupIds".into(), Value::Array(ids));
+    }
+
     /// Returns the ids of the groups this element belongs to, innermost
     /// first.
     pub fn group_ids(&self) -> Vec<&str> {

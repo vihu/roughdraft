@@ -6,6 +6,8 @@
 mod clipboard;
 mod commands;
 mod create;
+mod group;
+mod order;
 mod resize;
 mod restyle;
 mod select;
@@ -15,6 +17,7 @@ mod transform;
 
 use std::collections::HashSet;
 
+pub use self::order::Order;
 pub use self::style::{Style, StyleChange};
 pub use self::text::{ApproxMeasure, Measure};
 pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
@@ -35,6 +38,8 @@ pub struct Editor {
     multi: Option<Multi>,
     text: Option<text::TextEdit>,
     measure: Box<dyn Measure>,
+    /// The group entered with a double-click; clicks select inside it.
+    editing_group: Option<String>,
     history: History,
     zoom: f64,
 }
@@ -110,6 +115,12 @@ pub enum Command {
     Redo,
     /// Moves the selection by a scene-unit offset.
     Nudge(Point),
+    /// Moves the selection in the stack.
+    Reorder(Order),
+    /// Groups the selection (Ctrl+G).
+    Group,
+    /// Dissolves the selected groups (Ctrl+Shift+G).
+    Ungroup,
 }
 
 #[derive(Debug)]
@@ -186,6 +197,7 @@ impl Editor {
             multi: None,
             text: None,
             measure: Box::new(ApproxMeasure),
+            editing_group: None,
             history: History::default(),
             zoom: 1.0,
         }
@@ -363,6 +375,9 @@ impl Editor {
                     self.prune_selection();
                 }
             }
+            Command::Reorder(order) => self.reorder(order),
+            Command::Group => self.group(),
+            Command::Ungroup => self.ungroup(),
             Command::Nudge(offset) => {
                 if !self.selected.is_empty() {
                     self.history.record(self.scene.elements.clone());

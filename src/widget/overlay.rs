@@ -79,7 +79,28 @@ impl Sketch {
         let handles = self.editor.handles();
         // A lone 2-point line shows only its endpoint handles, no border.
         let bordered = !handles.as_ref().is_some_and(|h| !h.points.is_empty());
-        for element in selected.iter().filter(|_| bordered) {
+        // Selected groups get one dashed box instead of per-element borders.
+        for (_, [x1, y1, x2, y2]) in self.editor.selected_groups() {
+            let corners = [
+                [x1 - pad, y1 - pad],
+                [x2 + pad, y1 - pad],
+                [x2 + pad, y2 + pad],
+                [x1 - pad, y2 + pad],
+            ];
+            let group_line = Stroke {
+                style: Style::Solid(self.paint(Rgba::BLACK)),
+                width: 1.0,
+                line_dash: LineDash {
+                    segments: &[4.0, 4.0],
+                    offset: 0,
+                },
+                ..Stroke::default()
+            };
+            frame.stroke(&polygon(&corners, view), group_line);
+        }
+        let own_border =
+            |e: &&&crate::scene::Element| bordered && !self.editor.in_selected_group(&e.base.id);
+        for element in selected.iter().filter(own_border) {
             let [x1, y1, x2, y2] = geometry::local_bounds(element);
             let corners = [
                 [x1 - pad, y1 - pad],
