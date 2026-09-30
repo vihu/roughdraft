@@ -434,7 +434,7 @@ fn near_center(element: &Element, at: Point) -> bool {
 }
 
 /// Widest a label may be inside its container (`getBoundTextMaxWidth`).
-fn max_label_width(container: &Element, font_size: f64) -> f64 {
+pub(super) fn max_label_width(container: &Element, font_size: f64) -> f64 {
     /// Arrow labels are at least this many ems wide.
     const ARROW_MIN_EMS: f64 = 11.0;
     /// Arrow labels are at most this share of the arrow's width.

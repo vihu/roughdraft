@@ -175,6 +175,41 @@ fn two_point_arrows_drag_their_endpoints() {
 }
 
 #[test]
+fn labelled_shapes_keep_one_character_and_scale_their_label_with_shift() {
+    let labelled = || {
+        let mut editor = editor();
+        editor.command(Command::Tool(Tool::Text));
+        drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+        editor.set_text("hi");
+        editor.finish_text();
+        editor.command(Command::Tool(Tool::Selection));
+        select_a(&mut editor);
+        editor
+    };
+    let font = |editor: &Editor| match &editor.scene().elements.last().unwrap().kind {
+        Kind::Text(text) => text.font_size,
+        _ => panic!("label"),
+    };
+
+    // Pulling the right edge past the left one stops at one character
+    // (ApproxMeasure: 11 wide at 20) plus padding, without flipping.
+    let mut editor = labelled();
+    assert_eq!(editor.handle_at([104.0, 25.0]), Some(Handle::E));
+    drag(&mut editor, [104.0, 25.0], [-96.0, 25.0], NONE);
+    let (x, _, w, _) = box_of(&editor, 0);
+    assert_eq!((x, w), (0.0, 21.0));
+    assert_eq!(font(&editor), 20.0);
+
+    // Shift keeps the aspect ratio and scales the font with the label's
+    // room: 90 wide before, 190 after.
+    let mut editor = labelled();
+    let se = handle(&editor, Handle::Se);
+    drag(&mut editor, se, by(se, [100.0, 50.0]), SHIFT);
+    assert_eq!(box_of(&editor, 0), (0.0, 0.0, 200.0, 100.0));
+    assert_eq!(font(&editor), 20.0 * 190.0 / 90.0);
+}
+
+#[test]
 fn uniform_multi_resize_scales_label_fonts() {
     let mut editor = editor();
     drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);

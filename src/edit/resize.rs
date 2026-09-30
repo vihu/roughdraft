@@ -14,6 +14,9 @@ pub(super) const LOCK_ANGLE: f64 = PI / 12.0;
 /// Gap between a container's edge and its label (`BOUND_TEXT_PADDING`).
 const LABEL_PADDING: f64 = 5.0;
 
+/// Smallest font a Shift resize scales a label to (`MIN_FONT_SIZE`).
+const MIN_FONT_SIZE: f64 = 1.0;
+
 impl Editor {
     /// Resizes one element (and re-centres its label). The pointer is read in
     /// the element's unrotated frame, so the opposite edge stays put.
@@ -38,28 +41,77 @@ impl Editor {
             self.resize_text_width(*index, original, frame, handle, pointer);
             return;
         }
-        let [x1, y1, x2, y2] = frame.bounds;
-        let bounds = resized_box(
-            [x1, y1, x2, y2],
-            handle,
-            pointer,
-            modifiers.alt,
-            (modifiers.shift != is_image) || is_text,
-        );
+        let keep_aspect = (modifiers.shift != is_image) || is_text;
+        let label = start.iter().find(|(_, e)| container_id(e).is_some());
+        let mut bounds = resized_box(frame.bounds, handle, pointer, modifiers.alt, keep_aspect);
+        // A labelled shape keeps room for one character on one line, unless
+        // Shift scales its label instead (`resizeSingleElement`).
+        if let Some((_, label)) = label
+            && !keep_aspect
+        {
+            bounds = at_least(bounds, handle, modifiers.alt, self.min_label_box(label));
+        }
         if bounds[2] == bounds[0] && bounds[3] == bounds[1] {
             return;
         }
         let resized = scale_element(original, frame, bounds);
+        // With Shift the label's font follows the room it has
+        // (`measureFontSizeFromWidth`).
+        let font_size = match label {
+            Some((
+                _,
+                Element {
+                    kind: Kind::Text(text),
+                    ..
+                },
+            )) if keep_aspect => {
+                let (before, after) = (
+                    super::text::max_label_width(original, text.font_size),
+                    super::text::max_label_width(&resized, text.font_size),
+                );
+                let size = text.font_size * after / before;
+                if !size.is_finite() || size < MIN_FONT_SIZE {
+                    return;
+                }
+                Some(size)
+            }
+            _ => None,
+        };
         self.scene.elements[*index] = resized;
         self.scene.elements[*index].touch();
         // The label re-wraps to the new width; the shape grows to fit it,
         // upward when pulled by a top handle (`handleBindTextResize`).
-        // ponytail: no minimum size and no font scaling with Shift, which
-        // Excalidraw applies to labelled shapes.
         let from_top = matches!(handle, Handle::N | Handle::Nw | Handle::Ne);
-        for (label, _) in start.iter().filter(|(_, e)| container_id(e).is_some()) {
+        if let Some((label, _)) = label {
+            if let (Some(size), Kind::Text(text)) =
+                (font_size, &mut self.scene.elements[*label].kind)
+            {
+                text.font_size = size;
+            }
             self.rewrap_label(*label, from_top);
         }
+    }
+
+    /// Smallest box a labelled shape keeps (`getApproxMinLineWidth`,
+    /// `getApproxMinLineHeight`): one character by one line, plus padding.
+    // ponytail: the widest character of this label; Excalidraw takes the
+    // widest one it has measured in that font so far
+    fn min_label_box(&self, label: &Element) -> [f64; 2] {
+        let Kind::Text(text) = &label.kind else {
+            return [0.0, 0.0];
+        };
+        let widest = label
+            .original_text()
+            .chars()
+            .map(|c| {
+                self.measure
+                    .line_width(&c.to_string(), text.font_family, text.font_size)
+            })
+            .fold(0.0, f64::max);
+        [
+            widest + 2.0 * LABEL_PADDING,
+            text.font_size * text.line_height + 2.0 * LABEL_PADDING,
+        ]
     }
 
     /// Scales several elements about the opposite side or corner of their
@@ -322,6 +374,31 @@ impl Editor {
 }
 
 /// Which box edges a handle moves: (left, right, top, bottom).
+/// Grows a resized box to at least `min` wide and high from the sides the
+/// handle drags (about the centre with Alt), which also undoes a flip, like
+/// `Math.max(nextWidth, minWidth)`.
+fn at_least(bounds: Bounds, handle: Handle, alt: bool, [min_w, min_h]: [f64; 2]) -> Bounds {
+    let (moves_left, moves_right, moves_top, moves_bottom) = edges(handle);
+    let fit = |low: f64, high: f64, moves_low: bool, moves_high: bool, min: f64| {
+        if high - low >= min {
+            (low, high)
+        } else if alt {
+            let mid = (low + high) / 2.0;
+            (mid - min / 2.0, mid + min / 2.0)
+        } else if moves_low {
+            (high - min, high)
+        } else if moves_high {
+            (low, low + min)
+        } else {
+            (low, high)
+        }
+    };
+    let [x1, y1, x2, y2] = bounds;
+    let (x1, x2) = fit(x1, x2, moves_left, moves_right, min_w);
+    let (y1, y2) = fit(y1, y2, moves_top, moves_bottom, min_h);
+    [x1, y1, x2, y2]
+}
+
 pub(super) fn edges(handle: Handle) -> (bool, bool, bool, bool) {
     match handle {
         Handle::N => (false, false, true, false),
