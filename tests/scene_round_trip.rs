@@ -12,5 +12,8 @@ fn fixtures_round_trip_unchanged() {
         let scene: Scene = serde_json::from_value(fixture.scene.clone()).unwrap();
         let saved = serde_json::to_value(&scene).unwrap();
         assert_eq!(saved, fixture.scene, "{}", fixture.name);
+        // `to_json`'s JavaScript spelling reads back to the same values.
+        let text: serde_json::Value = serde_json::from_str(&scene.to_json()).unwrap();
+        assert_eq!(text, fixture.scene, "{} via to_json", fixture.name);
     }
 }

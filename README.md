@@ -56,7 +56,9 @@ impl Notes {
         // `saved` drops deleted elements and unused image files, like
         // Excalidraw's own save.
         let scene = self.sketch.scene().saved();
-        let json = serde_json::to_string_pretty(&scene).expect("scenes serialize");
+        // Two-space indents and JavaScript's number spelling, like
+        // Excalidraw's own files.
+        let json = scene.to_json();
         (json, svg::export(&scene, &SvgOptions::default()))
     }
 }

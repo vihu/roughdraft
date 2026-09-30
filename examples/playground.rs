@@ -183,8 +183,7 @@ impl Playground {
             Message::Opened(Some(path)) => *self = Self::open(Some(path), self.sketch.appearance()),
             Message::Opened(None) => {}
             Message::Save { choose } => {
-                let json = serde_json::to_string_pretty(&self.sketch.scene().saved())
-                    .expect("scenes serialize");
+                let json = self.sketch.scene().saved().to_json();
                 let version = self.sketch.scene().version();
                 let path = self.path.clone().filter(|_| !choose);
                 return Task::perform(save_file(path, json), move |result| {
