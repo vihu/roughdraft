@@ -33,7 +33,7 @@ fn dragging_on_the_canvas_moves_the_element_under_the_pointer() {
     };
     assert_eq!(messages.len(), 3, "down, move, up");
     for message in messages {
-        sketch.update(message);
+        let _ = sketch.update(message);
     }
 
     let moved = &sketch.scene().elements[0].base;

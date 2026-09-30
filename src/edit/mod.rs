@@ -3,6 +3,7 @@
 //! The widget converts input to scene coordinates and calls [`Editor`]; every
 //! interaction is testable without a window. Behaviour follows Excalidraw
 //! 0.18 as recorded in `.ai-docs/REFERENCE-001-excalidraw-editing-spec.md`.
+mod clipboard;
 mod commands;
 mod create;
 mod select;

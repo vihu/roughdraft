@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::{Editor, Tool};
 use crate::hit::container_id;
-use crate::scene::{Element, Kind};
+use crate::scene::Element;
 
 /// Scene units a duplicate is offset by (half the default grid).
 const DUPLICATE_OFFSET: f64 = 10.0;
@@ -62,10 +62,14 @@ impl Editor {
             entry.0 = entry.0.max(i);
             entry.1.push(i);
         }
+        let mut groups = HashMap::new();
         let mut inserts: Vec<(usize, Vec<Element>)> = units
             .into_values()
             .map(|(last, members)| {
-                let copies = members.iter().map(|&i| self.copy_of(i, &new_ids)).collect();
+                let copies = members
+                    .iter()
+                    .map(|&i| self.copy_of(i, &new_ids, &mut groups))
+                    .collect();
                 (last, copies)
             })
             .collect();
@@ -80,22 +84,18 @@ impl Editor {
         }
     }
 
-    fn copy_of(&self, index: usize, new_ids: &HashMap<String, String>) -> Element {
+    fn copy_of(
+        &self,
+        index: usize,
+        new_ids: &HashMap<String, String>,
+        groups: &mut HashMap<String, String>,
+    ) -> Element {
         let original = &self.scene.elements[index];
         let mut copy = original.duplicate();
         copy.base.id = new_ids[&original.base.id].clone();
         copy.base.x += DUPLICATE_OFFSET;
         copy.base.y += DUPLICATE_OFFSET;
-        if let Kind::Text(text) = &mut copy.kind
-            && let Some(container) = &mut text.container_id
-            && let Some(new) = new_ids.get(container)
-        {
-            *container = new.clone();
-        }
-        if let Some(bound) = &mut copy.base.bound_elements {
-            bound.retain(|b| new_ids.contains_key(&b.id));
-            bound.iter_mut().for_each(|b| b.id = new_ids[&b.id].clone());
-        }
+        copy.remap(new_ids, groups);
         copy
     }
 }

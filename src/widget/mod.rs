@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use iced::keyboard::{self, Key, key::Named};
 use iced::widget::canvas::{self, Canvas, Frame, LineDash, Path, Stroke, Style};
-use iced::{Color, Element, Length};
+use iced::{Color, Element, Length, Task};
 
 use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Pointer, Tool};
@@ -61,6 +61,11 @@ enum Input {
     Pointer(Pointer, geometry::Point, edit::Modifiers),
     Command(Command),
     Zoom(f64),
+    Copy,
+    Cut,
+    /// Paste centred on a scene point.
+    Paste(geometry::Point),
+    Pasted(geometry::Point, Option<String>),
 }
 
 /// Gap between the content and the canvas edge on open, like Excalidraw's
@@ -102,13 +107,38 @@ impl Sketch {
     }
 
     /// Applies a message from [`Sketch::view`].
-    pub fn update(&mut self, message: Message) {
-        match message.0 {
-            Input::Pointer(pointer, at, modifiers) => self.editor.pointer(pointer, at, modifiers),
-            Input::Command(command) => self.editor.command(command),
-            Input::Zoom(zoom) => return self.editor.set_zoom(zoom),
-        }
+    ///
+    /// Clipboard shortcuts return a task that talks to the system clipboard;
+    /// run it (`Task::map` it into your message type).
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = match message.0 {
+            Input::Pointer(pointer, at, modifiers) => {
+                self.editor.pointer(pointer, at, modifiers);
+                Task::none()
+            }
+            Input::Command(command) => {
+                self.editor.command(command);
+                Task::none()
+            }
+            Input::Zoom(zoom) => {
+                self.editor.set_zoom(zoom);
+                return Task::none();
+            }
+            Input::Copy => write_clipboard(self.editor.copy()),
+            Input::Cut => write_clipboard(self.editor.cut()),
+            Input::Paste(at) => {
+                return iced::clipboard::read_text()
+                    .map(move |text| Message(Input::Pasted(at, text.ok().map(|t| (*t).clone()))));
+            }
+            Input::Pasted(at, text) => {
+                if let Some(text) = text {
+                    self.editor.paste(&text, at);
+                }
+                Task::none()
+            }
+        };
         self.refresh();
+        task
     }
 
     /// Returns the current color scheme.
@@ -258,6 +288,10 @@ impl Sketch {
             frame.stroke(&marquee, line(&[]));
         }
     }
+}
+
+fn write_clipboard(json: Option<String>) -> Task<Message> {
+    json.map_or_else(Task::none, |json| iced::clipboard::write(json).discard())
 }
 
 /// Maps Excalidraw's shortcuts to editor commands.

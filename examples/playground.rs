@@ -12,7 +12,8 @@
 //! O ellipse, A arrow, L line (drag, or click point by point and finish with
 //! Enter, Escape or a second click), Q keeps the tool, Space or middle-drag
 //! pans, Ctrl+scroll zooms, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
-//! arrow keys nudge.
+//! arrow keys nudge. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
+//! format, so shapes paste between this and excalidraw.com.
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.
@@ -133,7 +134,7 @@ impl Playground {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Sketch(message) => self.sketch.update(message),
+            Message::Sketch(message) => return self.sketch.update(message).map(Message::Sketch),
             Message::ToggleAppearance => {
                 self.sketch.set_appearance(match self.sketch.appearance() {
                     Appearance::Light => Appearance::Dark,

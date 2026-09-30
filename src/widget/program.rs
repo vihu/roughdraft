@@ -101,7 +101,22 @@ impl canvas::Program<Message> for Sketch {
                 Some(canvas::Action::request_redraw().and_capture())
             }
             Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
-                shortcut(key, *modifiers).and_then(|command| publish(Input::Command(command)))
+                let clipboard = match key.as_ref() {
+                    Key::Character(c) if modifiers.command() => match c.to_lowercase().as_str() {
+                        "c" => Some(Input::Copy),
+                        "x" => Some(Input::Cut),
+                        "v" => {
+                            // Paste at the pointer, or the canvas centre.
+                            let at = cursor.position_over(bounds).unwrap_or(bounds.center());
+                            Some(Input::Paste(camera.scene_point(self, bounds, at)))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                clipboard
+                    .or_else(|| shortcut(key, *modifiers).map(Input::Command))
+                    .and_then(publish)
             }
             Event::Mouse(mouse::Event::ButtonPressed(button)) => {
                 let position = cursor.position_over(bounds)?;

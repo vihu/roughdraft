@@ -450,6 +450,7 @@ fn js_numbers(value: Value) -> Value {
 }
 
 mod new;
+mod refs;
 
 #[cfg(test)]
 mod tests;
