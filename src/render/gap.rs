@@ -125,7 +125,7 @@ fn clip_outside(lines: &[Vec<Point>], gap: Bounds) -> Vec<Segment> {
         for pair in line.windows(2) {
             let (p, q) = (pair[0], pair[1]);
             let lerp = |t: f64| [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
-            let (enter, leave) = inside(p, q, gap).unwrap_or((1.0, 1.0));
+            let (enter, leave) = segment_inside(p, q, gap).unwrap_or((1.0, 1.0));
             if enter > 0.0 {
                 if !drawing {
                     path.push(Segment::MoveTo(p));
@@ -145,7 +145,7 @@ fn clip_outside(lines: &[Vec<Point>], gap: Bounds) -> Vec<Segment> {
 
 /// The part of the segment from `p` to `q` inside `gap`, as a range of its
 /// parameter (Liang-Barsky); `None` when it misses.
-fn inside(p: Point, q: Point, [x1, y1, x2, y2]: Bounds) -> Option<(f64, f64)> {
+pub(crate) fn segment_inside(p: Point, q: Point, [x1, y1, x2, y2]: Bounds) -> Option<(f64, f64)> {
     let (dx, dy) = (q[0] - p[0], q[1] - p[1]);
     let (mut enter, mut leave) = (0.0_f64, 1.0_f64);
     for (towards, room) in [

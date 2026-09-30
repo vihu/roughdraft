@@ -18,6 +18,7 @@ use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
 pub(crate) use self::frame::{FRAME_RADIUS, rounded_rect, title_box};
 pub use self::frame::{frame_label, frames};
+pub(crate) use self::gap::segment_inside;
 pub use self::gap::{arrow_label, cut_gap, label_gap};
 pub(crate) use self::segment::{curve_path, segment_length, segment_midpoint};
 

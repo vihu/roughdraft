@@ -66,7 +66,7 @@ pub(super) fn edge_and_adjacent(points: &[Point], end: ArrowEnd) -> (usize, usiz
 }
 
 /// The arrow's points in scene coordinates.
-pub(super) fn arrow_points(arrow: &Element) -> Vec<Point> {
+pub(crate) fn arrow_points(arrow: &Element) -> Vec<Point> {
     let (Kind::Line(line) | Kind::Arrow(line)) = &arrow.kind else {
         return Vec::new();
     };
@@ -300,7 +300,7 @@ fn parts(element: &Element, offset: f64) -> Parts {
 }
 
 /// `distanceToBindableElement`: distance from `p` to the outline.
-pub(super) fn distance_to_outline(element: &Element, p: Point) -> f64 {
+pub(crate) fn distance_to_outline(element: &Element, p: Point) -> f64 {
     let c = center(element);
     let q = rotate(p, c, -element.base.angle);
     match outline(element) {

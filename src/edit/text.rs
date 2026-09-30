@@ -410,11 +410,8 @@ impl Editor {
     /// (`getApproxMinLineHeight` and the container max-height rules).
     fn fit_container(&mut self, index: usize, label_height: f64) {
         let container = &self.scene.elements[index];
-        let needed = match container.kind {
-            Kind::Ellipse => (label_height + 2.0 * PADDING) * SQRT_2,
-            Kind::Diamond => (label_height + 2.0 * PADDING) * 2.0,
-            Kind::Arrow(_) => return,
-            _ => label_height + 2.0 * PADDING,
+        let Some(needed) = label_height_room(container, label_height) else {
+            return;
         };
         if container.base.height < needed {
             let container = &mut self.scene.elements[index];
@@ -439,6 +436,17 @@ fn near_center(element: &Element, at: Point) -> bool {
     let center = [b.x + b.width / 2.0, b.y + b.height / 2.0];
     (center[0] - at[0]).hypot(center[1] - at[1]) <= CENTER_SNAP
         && !matches!(element.kind, Kind::Arrow(_))
+}
+
+/// The height `container` needs for a label `label_height` high; `None` for
+/// arrows, whose labels sit on the line whatever their height.
+pub(crate) fn label_height_room(container: &Element, label_height: f64) -> Option<f64> {
+    Some(match container.kind {
+        Kind::Ellipse => (label_height + 2.0 * PADDING) * SQRT_2,
+        Kind::Diamond => (label_height + 2.0 * PADDING) * 2.0,
+        Kind::Arrow(_) => return None,
+        _ => label_height + 2.0 * PADDING,
+    })
 }
 
 /// Widest a label may be inside its container (`getBoundTextMaxWidth`).

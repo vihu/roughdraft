@@ -1,5 +1,6 @@
-//! Commands for agents and scripts (PLAN-002). They never prompt, print a
-//! JSON result on stdout, and exit non-zero on failure.
+//! Commands for agents and scripts (PLAN-002): `build` and `check`. They
+//! never prompt, print a JSON result on stdout, and exit non-zero on
+//! failure.
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -12,11 +13,14 @@ Usage:
   roughdraft build <skeleton.json> -o <out.excalidraw>
                                              build a complete Excalidraw file
                                              from a skeleton (\"-\" reads stdin)
+  roughdraft check <file.excalidraw>         list what to fix: labels that do
+                                             not fit, broken bindings, overlaps
   roughdraft help                            show this
 
-Each command prints JSON on stdout: {\"ok\": true, ...} or
-{\"ok\": false, \"errors\": [{\"path\", \"message\"}]}. Exit codes: 0 done,
-2 bad input.";
+Each command prints JSON on stdout. build: {\"ok\": true, ...} or
+{\"ok\": false, \"errors\": [{\"path\", \"message\"}]}. check: {\"ok\", \"problems\":
+[{\"kind\", \"severity\", \"ids\", \"message\"}]}, ok when no errors. Exit codes:
+0 done, 1 check found errors, 2 bad input.";
 
 /// Runs the command in `args`; `None` when there is none, to open the
 /// editor.
@@ -24,6 +28,7 @@ pub fn run(args: &[String]) -> Option<i32> {
     let (command, rest) = args.split_first()?;
     Some(match command.as_str() {
         "build" => build(rest),
+        "check" => check(rest),
         "help" | "--help" | "-h" => {
             println!("{HELP}");
             0
@@ -71,6 +76,50 @@ fn build(args: &[String]) -> i32 {
             2
         }
     }
+}
+
+/// `roughdraft check <file.excalidraw>`.
+fn check(args: &[String]) -> i32 {
+    let path = match args {
+        [flag] if flag == "--help" || flag == "-h" => {
+            println!("{HELP}");
+            return 0;
+        }
+        [path] => PathBuf::from(path),
+        _ => return fail("usage: roughdraft check <file.excalidraw> (or - for stdin)"),
+    };
+    let text = match read(&path) {
+        Ok(text) => text,
+        Err(message) => return fail(&message),
+    };
+    let file: Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(e) => return fail(&format!("{}: not JSON: {e}", path.display())),
+    };
+    let measure = roughdraft::widget::font_measure();
+    let problems = match roughdraft::check::check(&file, &*measure) {
+        Ok(problems) => problems,
+        Err(e) => return fail(&format!("{}: not an Excalidraw scene: {e}", path.display())),
+    };
+    let errors = problems
+        .iter()
+        .filter(|p| p.severity == roughdraft::check::Severity::Error)
+        .count();
+    print(json!({
+        "ok": errors == 0,
+        "errors": errors,
+        "warnings": problems.len() - errors,
+        "problems": problems.iter().map(|p| json!({
+            "kind": p.kind,
+            "severity": match p.severity {
+                roughdraft::check::Severity::Error => "error",
+                roughdraft::check::Severity::Warning => "warning",
+            },
+            "ids": p.ids,
+            "message": p.message,
+        })).collect::<Vec<_>>(),
+    }));
+    i32::from(errors > 0)
 }
 
 /// The input path (or `-` for stdin) and the `-o` path.

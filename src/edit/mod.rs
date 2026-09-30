@@ -24,11 +24,12 @@ mod transform;
 
 use std::collections::HashSet;
 
+pub(crate) use self::binding::{arrow_points, distance_to_outline};
 pub use self::flip::Axis;
 pub use self::order::Order;
 pub use self::style::{Style, StyleChange};
-pub(crate) use self::text::max_label_width;
 pub use self::text::{ApproxMeasure, Measure};
+pub(crate) use self::text::{label_height_room, max_label_width};
 pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
 use crate::geometry::{self, Bounds, Point};
 use crate::history::History;

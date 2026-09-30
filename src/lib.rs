@@ -3,6 +3,7 @@
 
 mod base64;
 pub mod build;
+pub mod check;
 pub mod color;
 pub mod edit;
 pub mod fonts;

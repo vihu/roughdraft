@@ -7,9 +7,10 @@
 //! `distanceToBindableElement`, `intersectElementWithLineSegment`.
 use std::collections::HashSet;
 
+pub(crate) use self::outline::{arrow_points, distance_to_outline};
 use self::outline::{
-    arrow_points, bound_point, distance_to_outline, edge_and_adjacent, end_index, focus_distance,
-    is_bindable, max_binding_gap, opposite,
+    bound_point, edge_and_adjacent, end_index, focus_distance, is_bindable, max_binding_gap,
+    opposite,
 };
 use super::{Editor, Gesture};
 use crate::geometry::{self, Point};
