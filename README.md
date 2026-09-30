@@ -106,6 +106,19 @@ bundled and render in the system sans or monospace font.
 
 ## The app
 
+Download it from [Releases](https://github.com/vihu/roughdraft/releases):
+
+- Linux (x86_64 and arm64): `roughdraft-<version>-<arch>.AppImage`. Make it
+  executable (`chmod +x`) and run it. Needs glibc 2.35 or newer (Ubuntu
+  22.04, Debian 12, Fedora 36 and later).
+- macOS 11 or newer (Apple silicon and Intel):
+  `roughdraft-<version>-macos-universal.zip`. Unzip it and move
+  `roughdraft.app` to Applications. The app is not notarized, so macOS blocks
+  the first launch: allow it in System Settings > Privacy & Security > Open
+  Anyway, or run `xattr -dr com.apple.quarantine /Applications/roughdraft.app`.
+
+Or run it from source:
+
 ```text
 cargo run --release -p roughdraft-app -- [scene.excalidraw] [--dark]
 ```

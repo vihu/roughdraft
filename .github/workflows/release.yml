@@ -1,0 +1,83 @@
+name: Release
+
+# A `v*` tag builds the app for Linux and macOS and drafts a GitHub release
+# with the builds; publish it from the Releases page. Run it by hand
+# (Actions > Release > Run workflow) to build without releasing: the builds
+# are then the run's artifacts.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  appimage:
+    name: AppImage (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          # The oldest supported Ubuntu sets the oldest glibc the AppImage
+          # runs on.
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: app/packaging/appimage.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: appimage-${{ matrix.arch }}
+          path: target/dist/*.AppImage
+          if-no-files-found: error
+
+  macos:
+    name: macOS app (universal)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: brew install librsvg
+      - run: app/packaging/macos.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-universal
+          path: target/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Draft the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [appimage, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the tag matches the version in Cargo.toml
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum -- * > SHA256SUMS
+      - run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --draft --verify-tag --generate-notes
+          --title "roughdraft ${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ github.token }}
