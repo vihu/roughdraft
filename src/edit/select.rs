@@ -24,9 +24,11 @@ impl Editor {
     }
 
     pub(super) fn select_press(&mut self, at: Point, modifiers: Modifiers) {
-        if self.press_handle(at) {
+        if self.press_handle(at, modifiers) {
             return;
         }
+        // A press off the edited line's points leaves the line editor.
+        self.line_edit = None;
         let hit = self.hit(at).map(|e| e.base.id.clone());
         // Clicking outside the entered group leaves it.
         let inside_group = |id: &String| {
@@ -223,7 +225,9 @@ impl Editor {
                 self.expand_to_groups();
             }
             Some(Gesture::Move { .. } | Gesture::Marquee { .. }) => {}
-            Some(Gesture::Endpoint { index, before, .. }) => {
+            Some(
+                Gesture::Endpoint { index, before, .. } | Gesture::Points { index, before, .. },
+            ) => {
                 self.bind_arrow_ends(index);
                 if before != self.scene.elements {
                     self.history.record(before);

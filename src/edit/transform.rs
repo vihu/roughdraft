@@ -44,9 +44,14 @@ pub struct Handles {
     /// Points of a selected line or arrow, in scene units; each can be
     /// dragged.
     pub points: Vec<Point>,
-    /// Middle of a selected 2-point line or arrow long enough to have one;
-    /// dragging it adds a point there.
-    pub midpoint: Option<Point>,
+    /// Segment middles long enough to have a handle, with the index a point
+    /// dragged from there is inserted at: only a 2-point line's, or every
+    /// segment's in the line editor.
+    pub midpoints: Vec<(usize, Point)>,
+    /// Points selected in the line editor.
+    pub selected_points: Vec<usize>,
+    /// Whether the line editor is open (points are drawn larger).
+    pub editing_line: bool,
 }
 
 /// Transform handle size in screen pixels (mouse).
@@ -85,14 +90,36 @@ impl Editor {
             return None;
         }
         let points = self.line_points().unwrap_or_default();
-        // A 2-point line shows only its points (`shouldShowBoundingBox`).
-        if let [a, b] = points[..] {
-            let long = (b[0] - a[0]).hypot(b[1] - a[1]) * self.zoom >= MIDPOINT_MIN_LENGTH;
+        let editing_line = self.line_edit.is_some();
+        // A 2-point line or the line editor shows only points
+        // (`shouldShowBoundingBox`).
+        if points.len() == 2 || (editing_line && !points.is_empty()) {
+            // ponytail: straight segment middles; Excalidraw puts them on the
+            // curve of round lines (`getSegmentMidPoint`).
+            let midpoints = points
+                .windows(2)
+                .enumerate()
+                .filter(|(_, ab)| {
+                    let (a, b) = (ab[0], ab[1]);
+                    (b[0] - a[0]).hypot(b[1] - a[1]) * self.zoom >= MIDPOINT_MIN_LENGTH
+                })
+                .map(|(k, ab)| {
+                    let (a, b) = (ab[0], ab[1]);
+                    (k + 1, [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0])
+                })
+                .collect();
+            let selected_points = self
+                .line_edit
+                .as_ref()
+                .map(|edit| edit.selected.clone())
+                .unwrap_or_default();
             return Some(Handles {
                 angle: 0.0,
                 handles: Vec::new(),
                 points,
-                midpoint: long.then(|| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]),
+                midpoints,
+                selected_points,
+                editing_line,
             });
         }
         let frame = self.frame()?;
@@ -121,7 +148,9 @@ impl Editor {
             angle: frame.transform.rotation(),
             handles,
             points,
-            midpoint: None,
+            midpoints: Vec::new(),
+            selected_points: Vec::new(),
+            editing_line: false,
         })
     }
 
@@ -207,29 +236,49 @@ impl Editor {
 
     /// Starts a resize, rotation or point drag when `at` is on a handle. A
     /// press on a 2-point line's midpoint adds a point there and drags it.
-    pub(super) fn press_handle(&mut self, at: Point) -> bool {
-        let reach = (POINT_RADIUS + 2.0) / self.zoom;
-        let near = |p: &Point| (p[0] - at[0]).hypot(p[1] - at[1]) <= reach;
+    pub(super) fn press_handle(&mut self, at: Point, modifiers: Modifiers) -> bool {
         let handles = self.handles();
+        // Line editor points are drawn twice as large (`POINT_HANDLE_SIZE`).
+        let radius = if self.line_edit.is_some() {
+            2.0 * POINT_RADIUS
+        } else {
+            POINT_RADIUS
+        };
+        let reach = (radius + 2.0) / self.zoom;
+        let near = |p: &Point| (p[0] - at[0]).hypot(p[1] - at[1]) <= reach;
         let point = handles
             .as_ref()
             .and_then(|h| h.points.iter().position(near));
-        let midpoint = handles.as_ref().and_then(|h| h.midpoint).filter(near);
+        let midpoint = handles
+            .as_ref()
+            .and_then(|h| h.midpoints.iter().copied().find(|(_, p)| near(p)));
         if point.is_some() || midpoint.is_some() {
             let index = self.selection_indices()[0];
             let before = self.scene.elements.clone();
             let which = match (point, midpoint) {
                 (Some(which), _) => which,
-                (None, Some(middle)) => {
-                    self.insert_point(index, 1, middle);
-                    1
+                (None, Some((insert, middle))) => {
+                    self.insert_point(index, insert, middle);
+                    if let Some(edit) = &mut self.line_edit {
+                        edit.selected.clear();
+                    }
+                    insert
                 }
                 (None, None) => unreachable!("checked above"),
             };
-            self.gesture = Some(Gesture::Endpoint {
-                index,
-                which,
-                before,
+            self.gesture = Some(if self.line_edit.is_some() {
+                let mut gesture = self.press_line_point(index, which, at, modifiers);
+                // The undo step starts before any inserted point.
+                if let Gesture::Points { before: kept, .. } = &mut gesture {
+                    *kept = before;
+                }
+                gesture
+            } else {
+                Gesture::Endpoint {
+                    index,
+                    which,
+                    before,
+                }
             });
             return true;
         }
@@ -340,6 +389,20 @@ impl Editor {
                     index,
                     which,
                     before,
+                });
+            }
+            Some(Gesture::Points {
+                index,
+                before,
+                from,
+                starts,
+            }) => {
+                self.drag_line_points(index, from, &starts, at);
+                self.gesture = Some(Gesture::Points {
+                    index,
+                    before,
+                    from,
+                    starts,
                 });
             }
             other => {

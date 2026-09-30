@@ -244,7 +244,7 @@ impl Editor {
 
     /// Sets local points, moving `x`/`y` so the first point stays at
     /// `[0, 0]`, and keeps any label on the line's middle.
-    fn rebase_points(&mut self, index: usize, points: Vec<Point>) {
+    pub(super) fn rebase_points(&mut self, index: usize, points: Vec<Point>) {
         let shift = points[0];
         let points: Vec<Point> = points
             .iter()

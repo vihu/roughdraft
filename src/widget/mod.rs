@@ -550,6 +550,7 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
     match key.as_ref() {
         Key::Named(Named::Delete | Named::Backspace) if !command => Some(Command::Delete),
         Key::Named(Named::Escape) => Some(Command::Escape),
+        Key::Named(Named::Enter) if command => Some(Command::EditLine),
         Key::Named(Named::Enter) => Some(Command::Finish),
         Key::Named(Named::ArrowLeft) => Some(Command::Nudge([-step, 0.0])),
         Key::Named(Named::ArrowRight) => Some(Command::Nudge([step, 0.0])),

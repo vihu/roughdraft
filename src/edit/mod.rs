@@ -8,6 +8,7 @@ mod clipboard;
 mod commands;
 mod create;
 mod group;
+mod line;
 mod order;
 mod resize;
 mod restyle;
@@ -49,6 +50,7 @@ pub struct Editor {
     /// Last pointer position without a button down, for the arrow tool's
     /// binding highlight.
     hover: Option<Point>,
+    line_edit: Option<line::LineEdit>,
 }
 
 /// What a pointer press on the canvas does.
@@ -132,6 +134,8 @@ pub enum Command {
     LargerFont,
     /// Selected text and labels 10% smaller (Ctrl+Shift+<).
     SmallerFont,
+    /// Opens the line editor on the selected line or arrow (Ctrl+Enter).
+    EditLine,
 }
 
 #[derive(Debug)]
@@ -179,11 +183,19 @@ enum Gesture {
         start: Vec<(usize, Element)>,
         center: Point,
     },
-    /// Dragging one end of a 2-point line or arrow.
+    /// Dragging one point of a line or arrow.
     Endpoint {
         index: usize,
         which: usize,
         before: Vec<Element>,
+    },
+    /// Dragging the selected points in the line editor; `starts` holds each
+    /// point's index and scene position at the press.
+    Points {
+        index: usize,
+        before: Vec<Element>,
+        from: Point,
+        starts: Vec<(usize, Point)>,
     },
 }
 
@@ -213,6 +225,7 @@ impl Editor {
             history: History::default(),
             zoom: 1.0,
             hover: None,
+            line_edit: None,
         }
     }
 
@@ -286,7 +299,8 @@ impl Editor {
                 Some(
                     Gesture::Shape { index, .. }
                     | Gesture::Line { index, .. }
-                    | Gesture::Endpoint { index, .. },
+                    | Gesture::Endpoint { index, .. }
+                    | Gesture::Points { index, .. },
                 ),
                 _,
             ) => vec![id(*index)],
@@ -349,7 +363,17 @@ impl Editor {
         self.finish_text();
         let drawing = self.multi.is_some();
         self.finish_multi();
+        // The line editor stays open only for what it handles itself.
+        if !matches!(
+            command,
+            Command::Delete | Command::Undo | Command::Redo | Command::Escape | Command::Nudge(_)
+        ) {
+            self.line_edit = None;
+        }
         match command {
+            Command::Escape if self.line_edit.is_some() => self.line_edit = None,
+            Command::Delete if self.line_edit.is_some() => self.delete_line_points(),
+            Command::EditLine => self.enter_line_editor(),
             Command::Tool(tool) => {
                 self.tool = tool;
                 if tool != Tool::Selection {
@@ -385,11 +409,13 @@ impl Editor {
             Command::Undo => {
                 if self.history.undo(&mut self.scene.elements) {
                     self.prune_selection();
+                    self.prune_line_edit();
                 }
             }
             Command::Redo => {
                 if self.history.redo(&mut self.scene.elements) {
                     self.prune_selection();
+                    self.prune_line_edit();
                 }
             }
             Command::Reorder(order) => self.reorder(order),

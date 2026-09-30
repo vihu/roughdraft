@@ -39,13 +39,26 @@ impl Sketch {
             0x5a as f32 / 255.0,
             0xd8 as f32 / 255.0,
         ));
-        for point in &handles.points {
+        // `renderSingleLinearPoint`: twice the size in the line editor,
+        // selected points filled with the selection colour.
+        let radius = if handles.editing_line {
+            2.0 * edit::POINT_RADIUS
+        } else {
+            edit::POINT_RADIUS
+        } as f32;
+        let chosen = self.paint(Rgba {
+            a: 0.9,
+            ..Rgba::rgb(134.0 / 255.0, 131.0 / 255.0, 226.0 / 255.0)
+        });
+        for (i, point) in handles.points.iter().enumerate() {
             let [x, y] = view.apply(*point);
-            let circle = Path::circle(
-                iced::Point::new(x as f32, y as f32),
-                edit::POINT_RADIUS as f32,
-            );
-            frame.fill(&circle, Color { a: 0.9, ..white });
+            let circle = Path::circle(iced::Point::new(x as f32, y as f32), radius);
+            let fill = if handles.selected_points.contains(&i) {
+                chosen
+            } else {
+                Color { a: 0.9, ..white }
+            };
+            frame.fill(&circle, fill);
             frame.stroke(
                 &circle,
                 Stroke {
@@ -54,18 +67,18 @@ impl Sketch {
                 },
             );
         }
-        // The phantom point that adds a point when dragged: filled, no outline.
-        if let Some(midpoint) = handles.midpoint {
-            let [x, y] = view.apply(midpoint);
+        // Phantom points that add a point when dragged: filled, no outline.
+        let phantom = self.paint(Rgba {
+            a: 0.7,
+            ..Rgba::rgb(177.0 / 255.0, 151.0 / 255.0, 252.0 / 255.0)
+        });
+        for (_, midpoint) in &handles.midpoints {
+            let [x, y] = view.apply(*midpoint);
             let circle = Path::circle(
                 iced::Point::new(x as f32, y as f32),
                 edit::POINT_RADIUS as f32,
             );
-            let phantom = Rgba {
-                a: 0.7,
-                ..Rgba::rgb(177.0 / 255.0, 151.0 / 255.0, 252.0 / 255.0)
-            };
-            frame.fill(&circle, self.paint(phantom));
+            frame.fill(&circle, phantom);
         }
     }
 

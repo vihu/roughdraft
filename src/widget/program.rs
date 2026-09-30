@@ -120,6 +120,10 @@ impl canvas::Program<Message> for Sketch {
                 });
                 if double && self.editor.tool() == Tool::Selection {
                     state.last_click = None;
+                    // Ctrl+double-click opens the line editor.
+                    if state.modifiers.command() {
+                        return publish(Input::Command(edit::Command::EditLine));
+                    }
                     return publish(Input::DoubleClick(at));
                 }
                 state.last_click = Some((Instant::now(), position));

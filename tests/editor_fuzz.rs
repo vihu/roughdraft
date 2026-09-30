@@ -52,7 +52,7 @@ fn session(seed: u64) {
                     .iter()
                     .map(|(_, p)| *p)
                     .chain(handles.points.iter().copied())
-                    .chain(handles.midpoint)
+                    .chain(handles.midpoints.iter().map(|(_, p)| *p))
                     .collect();
                 if targets.is_empty() {
                     continue;
@@ -87,6 +87,8 @@ fn session(seed: u64) {
                 Tool::Hand,
             ]))),
             10 => editor.command(rng.pick(&[
+                Command::EditLine,
+                Command::EditLine,
                 Command::ToggleLock,
                 Command::Escape,
                 Command::Finish,

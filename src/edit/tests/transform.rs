@@ -199,7 +199,7 @@ fn line_points_drag_and_a_midpoint_adds_a_point() {
     drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
     let handles = editor.handles().unwrap();
     assert!(handles.handles.is_empty(), "no box for a 2-point line");
-    assert_eq!(handles.midpoint, Some([50.0, 0.0]));
+    assert_eq!(handles.midpoints, [(1, [50.0, 0.0])]);
 
     drag(&mut editor, [50.0, 0.0], [50.0, 40.0], NONE);
     let points = |editor: &Editor| match &editor.scene().elements[0].kind {
@@ -210,7 +210,10 @@ fn line_points_drag_and_a_midpoint_adds_a_point() {
     let handles = editor.handles().unwrap();
     assert!(!handles.handles.is_empty(), "3 points get the box too");
     assert_eq!(handles.points.len(), 3);
-    assert_eq!(handles.midpoint, None);
+    assert!(
+        handles.midpoints.is_empty(),
+        "3+ points: only in the line editor"
+    );
 
     // Any point drags; the first re-bases the line.
     drag(&mut editor, [0.0, 0.0], [-10.0, 5.0], NONE);
@@ -225,4 +228,48 @@ fn line_points_drag_and_a_midpoint_adds_a_point() {
     editor.command(Command::Undo);
     editor.command(Command::Undo);
     assert_eq!(points(&editor), [[0.0, 0.0], [100.0, 0.0]]);
+}
+
+#[test]
+fn line_editor_selects_drags_adds_and_deletes_points() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Line));
+    for at in [[0.0, 0.0], [100.0, 0.0], [200.0, 0.0], [200.0, 0.0]] {
+        editor.pointer(Pointer::Hover, at, NONE);
+        editor.pointer(Pointer::Down, at, NONE);
+        editor.pointer(Pointer::Up, at, NONE);
+    }
+    let points = |editor: &Editor| match &editor.scene().elements[0].kind {
+        Kind::Line(line) => line.points.clone(),
+        _ => unreachable!(),
+    };
+    assert_eq!(points(&editor).len(), 3);
+    editor.command(Command::EditLine);
+    let id = editor.scene().elements[0].base.id.clone();
+    assert_eq!(editor.editing_line(), Some(id.as_str()));
+    let handles = editor.handles().unwrap();
+    assert!(handles.editing_line && handles.handles.is_empty());
+    assert_eq!(handles.midpoints, [(1, [50.0, 0.0]), (2, [150.0, 0.0])]);
+
+    // Select the middle and the last point, then drag both.
+    drag(&mut editor, [100.0, 0.0], [100.0, 0.0], NONE);
+    drag(&mut editor, [200.0, 0.0], [200.0, 0.0], SHIFT);
+    assert_eq!(editor.handles().unwrap().selected_points, [1, 2]);
+    drag(&mut editor, [200.0, 0.0], [200.0, 30.0], NONE);
+    assert_eq!(points(&editor), [[0.0, 0.0], [100.0, 30.0], [200.0, 30.0]]);
+
+    // A segment middle adds a point; Delete removes the selected one.
+    drag(&mut editor, [50.0, 15.0], [50.0, -20.0], NONE);
+    assert_eq!(points(&editor).len(), 4);
+    assert_eq!(editor.handles().unwrap().selected_points, [1]);
+    editor.command(Command::Delete);
+    assert_eq!(points(&editor), [[0.0, 0.0], [100.0, 30.0], [200.0, 30.0]]);
+    assert!(!editor.scene().elements[0].base.is_deleted);
+
+    // Escape leaves the editor, keeping the line selected.
+    editor.command(Command::Escape);
+    assert_eq!(editor.editing_line(), None);
+    assert!(editor.is_selected(&id));
+    editor.command(Command::Undo);
+    assert_eq!(points(&editor).len(), 4, "the delete was one undo step");
 }
