@@ -72,11 +72,13 @@ impl Editor {
             unreachable!("the line editor only opens on lines and arrows")
         };
         let transform = geometry::element_transform(element);
-        let starts = edit
+        // The grabbed point first: it lands on the grid, the others follow.
+        let mut starts: Vec<(usize, Point)> = edit
             .selected
             .iter()
             .map(|&p| (p, transform.apply(line.points[p])))
             .collect();
+        starts.sort_by_key(|&(p, _)| p != which);
         Gesture::Points {
             index,
             before,
@@ -85,13 +87,15 @@ impl Editor {
         }
     }
 
-    /// Moves the selected points by the pointer's travel since the press.
+    /// Moves the selected points by the pointer's travel since the press;
+    /// on the grid, by the travel that puts the first (grabbed) point on it.
     pub(super) fn drag_line_points(
         &mut self,
         index: usize,
         from: Point,
         starts: &[(usize, Point)],
         at: Point,
+        modifiers: Modifiers,
     ) {
         let element = &self.scene.elements[index];
         let (Kind::Line(line) | Kind::Arrow(line)) = &element.kind else {
@@ -99,7 +103,11 @@ impl Editor {
         };
         let to_local = geometry::element_transform(element).inverse();
         let mut points = line.points.clone();
-        let delta = [at[0] - from[0], at[1] - from[1]];
+        let mut delta = [at[0] - from[0], at[1] - from[1]];
+        if let Some(&(_, [x, y])) = starts.first() {
+            let [gx, gy] = self.snap([x + delta[0], y + delta[1]], modifiers);
+            delta = [gx - x, gy - y];
+        }
         for &(p, [x, y]) in starts {
             points[p] = to_local.apply([x + delta[0], y + delta[1]]);
         }

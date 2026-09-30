@@ -544,11 +544,13 @@ impl Kind {
     }
 }
 
+mod grid;
 mod json;
 mod new;
 mod refs;
 mod restore;
 
+pub use self::grid::Grid;
 pub(crate) use self::json::js_number;
 use self::json::now_ms;
 pub use self::refs::{ArrowEnd, Binding};

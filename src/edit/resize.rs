@@ -287,9 +287,11 @@ impl Editor {
             return;
         };
         let mut points = line.points.clone();
-        let local = geometry::element_transform(element).inverse().apply(at);
+        let local = geometry::element_transform(element)
+            .inverse()
+            .apply(self.snap(at, modifiers));
         // Shift snaps the angle to the neighbour before it (after it for the
-        // first point).
+        // first point), from the pointer's grid point.
         let other = points[if which == 0 { 1 } else { which - 1 }];
         let offset =
             super::create::lock_angle([local[0] - other[0], local[1] - other[1]], modifiers.shift);

@@ -51,6 +51,10 @@ impl Editor {
                     self.tool = Tool::Selection;
                 }
             }
+            Command::ToggleGrid => {
+                let on = self.scene.grid().is_none();
+                self.scene.set_grid(on);
+            }
             Command::Escape => self.tool = Tool::Selection,
             Command::Finish if drawing => {}
             // Enter edits only text and shapes that take a label.

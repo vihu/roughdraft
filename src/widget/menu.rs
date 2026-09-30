@@ -1,11 +1,13 @@
 //! The main menu in the top-left corner, like Excalidraw's: the actions
-//! the host offers (open, save, export, ...) and the dark/light switch.
+//! the host offers (open, save, export, ...), the grid and the dark/light
+//! switch.
 use iced::widget::{button, column, container, opaque, rule, text};
 use iced::{Element, Length};
 
 use super::icons::{Glyph, icon};
 use super::ui::panel_style;
 use super::{Appearance, Input, Message, Sketch};
+use crate::edit::Command;
 
 /// An action the main menu asks the host to carry out: the menu cannot
 /// know where the host keeps its files. See [`Message::request`].
@@ -55,7 +57,7 @@ impl Message {
 // Public API
 impl Sketch {
     /// Sets the host actions the main menu offers, in this order. None by
-    /// default; the dark/light switch is always there.
+    /// default; the grid and dark/light switches are always there.
     pub fn set_menu(&mut self, items: Vec<Request>) {
         self.menu = items;
     }
@@ -90,6 +92,13 @@ impl Sketch {
             if !self.menu.is_empty() {
                 items = items.push(rule::horizontal(1));
             }
+            // Excalidraw has it in the canvas context menu (Ctrl+').
+            let grid = if self.editor.scene().grid().is_some() {
+                "Hide grid"
+            } else {
+                "Show grid"
+            };
+            items = items.push(item(grid, Message(Input::Command(Command::ToggleGrid))));
             items = items.push(item(theme, Message(Input::ToggleAppearance)));
             content = content.push(
                 container(items)

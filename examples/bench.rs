@@ -87,6 +87,29 @@ fn main() {
         .collect();
     report("pan", &pan);
 
+    // The same pan with the grid on (Ctrl+'), which is redrawn with the view.
+    let grid = Event::Keyboard(keyboard::Event::KeyPressed {
+        key: Key::Character("'".into()),
+        modified_key: Key::Character("'".into()),
+        physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Quote),
+        location: keyboard::Location::Standard,
+        modifiers: keyboard::Modifiers::COMMAND,
+        text: None,
+        repeat: false,
+    });
+    bench.frame(&mut sketch, Some(&grid), centre);
+    assert!(sketch.scene().grid().is_some(), "Ctrl+' turned the grid on");
+    let pan: Vec<Timing> = (0..FRAMES)
+        .map(|_| {
+            let wheel = Event::Mouse(mouse::Event::WheelScrolled {
+                delta: mouse::ScrollDelta::Pixels { x: 0.0, y: -4.0 },
+            });
+            bench.frame(&mut sketch, Some(&wheel), centre)
+        })
+        .collect();
+    report("pan with the grid", &pan);
+    bench.frame(&mut sketch, Some(&grid), centre);
+
     // One long pen stroke, 8 pointer events per frame (a 500 Hz mouse at
     // 60 frames a second): the cost grows with its length.
     let key = Event::Keyboard(keyboard::Event::KeyPressed {

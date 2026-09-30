@@ -161,3 +161,27 @@ fn repeated_ids_get_new_ones_and_null_elements_load_empty() {
     let empty: Scene = serde_json::from_str(r#"{"type":"excalidraw","elements":null}"#).unwrap();
     assert!(empty.elements.is_empty());
 }
+
+#[test]
+fn the_grid_follows_excalidraws_restore() {
+    let grid = |app_state: &str| {
+        let json = format!(r#"{{"type":"excalidraw","elements":[],"appState":{app_state}}}"#);
+        serde_json::from_str::<Scene>(&json).unwrap().grid()
+    };
+    assert_eq!(grid(r#"{"gridSize":20}"#), None, "off unless enabled");
+    assert_eq!(
+        grid(r#"{"gridModeEnabled":true}"#),
+        Some(super::Grid {
+            size: 20.0,
+            step: 5
+        })
+    );
+    // Rounded and kept within 1 to 100.
+    assert_eq!(
+        grid(r#"{"gridModeEnabled":true,"gridSize":0.4,"gridStep":250}"#),
+        Some(super::Grid {
+            size: 1.0,
+            step: 100
+        })
+    );
+}

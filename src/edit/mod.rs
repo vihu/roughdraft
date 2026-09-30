@@ -11,6 +11,7 @@ mod eraser;
 mod flip;
 mod frame;
 mod freedraw;
+mod grid;
 mod group;
 mod line;
 mod order;
@@ -117,6 +118,9 @@ pub enum Command {
     Tool(Tool),
     /// Keeps the current tool after drawing (Excalidraw's tool lock, Q).
     ToggleLock,
+    /// Shows or hides the grid, which drawing and moving snap to (Ctrl+').
+    /// Saved with the scene; not an undo step.
+    ToggleGrid,
     /// Finishes what is being drawn and returns to the selection tool.
     Escape,
     /// Enter: finishes a multi-point line or arrow, or starts editing the
@@ -160,11 +164,14 @@ pub enum Command {
 #[derive(Debug)]
 enum Gesture {
     /// Dragging the selection. `clicked` narrows the selection to itself if
-    /// the press ends without moving; `duplicated` once Alt has made copies.
+    /// the press ends without moving; `duplicated` once Alt has made copies;
+    /// `corner` is the moving elements' top-left at the press, which lands on
+    /// the grid.
     Move {
         from: Point,
         before: Vec<Element>,
         starts: Vec<(usize, Point)>,
+        corner: Point,
         moved: bool,
         clicked: Option<String>,
         duplicated: bool,
@@ -220,7 +227,8 @@ enum Gesture {
         marked: HashSet<String>,
     },
     /// Dragging the selected points in the line editor; `starts` holds each
-    /// point's index and scene position at the press.
+    /// point's index and scene position at the press, the grabbed point
+    /// first.
     Points {
         index: usize,
         before: Vec<Element>,

@@ -110,7 +110,9 @@ impl Sketch {
                 static_changed = true;
             }
         }
-        static_changed |= !previous.is_empty() || order != self.order;
+        let grid = scene.grid();
+        static_changed |= !previous.is_empty() || order != self.order || grid != self.grid;
+        self.grid = grid;
         self.order = order;
         self.active = active;
         if static_changed {

@@ -26,16 +26,23 @@ const PROPORTIONAL: u8 = 2;
 const ADAPTIVE: u8 = 3;
 
 impl Editor {
-    pub(super) fn create_press(&mut self, at: Point, _modifiers: Modifiers) {
+    pub(super) fn create_press(&mut self, at: Point, modifiers: Modifiers) {
         if self.multi.is_some() {
             return self.multi_click(at);
         }
         let before = self.scene.elements.clone();
         let index = self.scene.elements.len();
-        let Some(element) = self.new_element(at) else {
+        // New elements start on the grid; pen strokes do not.
+        let start = if self.tool == Tool::Freedraw {
+            at
+        } else {
+            self.snap(at, modifiers)
+        };
+        let Some(element) = self.new_element(start) else {
             return;
         };
         let gesture = match element.kind {
+            // The drag threshold measures from the pointer, not the grid.
             Kind::Line(_) | Kind::Arrow(_) => Gesture::Line {
                 index,
                 origin: at,
@@ -49,7 +56,7 @@ impl Editor {
             },
             _ => Gesture::Shape {
                 index,
-                origin: at,
+                origin: start,
                 before,
             },
         };
@@ -62,7 +69,7 @@ impl Editor {
         match &mut self.gesture {
             Some(Gesture::Shape { index, origin, .. }) => {
                 let (index, origin) = (*index, *origin);
-                self.drag_shape(index, origin, at, modifiers);
+                self.drag_shape(index, origin, self.snap(at, modifiers), modifiers);
                 true
             }
             Some(Gesture::Line {
@@ -77,6 +84,15 @@ impl Editor {
                 }
                 *dragged = true;
                 let index = *index;
+                // The second point: the pointer on the grid, or with Shift the
+                // pointer itself at a locked angle.
+                let base = &self.scene.elements[index].base;
+                let end = if modifiers.shift {
+                    at
+                } else {
+                    self.snap(at, modifiers)
+                };
+                let offset = [end[0] - base.x, end[1] - base.y];
                 self.set_points(index, vec![[0.0, 0.0], lock_angle(offset, modifiers.shift)]);
                 true
             }
@@ -112,14 +128,13 @@ impl Editor {
             Some(Gesture::Line {
                 index,
                 before,
-                origin,
                 dragged: false,
+                ..
             }) => {
                 // No drag: switch to click-by-click drawing with a floating point.
-                self.set_points(
-                    index,
-                    vec![[0.0, 0.0], [at[0] - origin[0], at[1] - origin[1]]],
-                );
+                let base = &self.scene.elements[index].base;
+                let offset = [at[0] - base.x, at[1] - base.y];
+                self.set_points(index, vec![[0.0, 0.0], offset]);
                 self.multi = Some(Multi { index, before });
             }
             Some(Gesture::Freedraw { index, before, .. }) => self.finish_stroke(index, at, before),
@@ -136,6 +151,7 @@ impl Editor {
         let Some(index) = self.multi.as_ref().map(|m| m.index) else {
             return;
         };
+        let at = self.snap(at, modifiers);
         let (origin, mut points) = self.origin_and_points(index);
         let committed = points[points.len() - 2];
         let offset = [

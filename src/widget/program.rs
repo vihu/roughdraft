@@ -112,7 +112,10 @@ impl canvas::Program<Message> for Sketch {
                     _ => None,
                 };
                 clipboard
-                    .or_else(|| shortcut(key, *modifiers).map(Input::Command))
+                    .or_else(|| {
+                        let grid = self.editor.scene().grid().map(|g| g.size);
+                        shortcut(key, *modifiers, grid).map(Input::Command)
+                    })
                     .and_then(publish)
             }
             Event::Mouse(mouse::Event::ButtonPressed(button)) => {
@@ -241,6 +244,9 @@ impl canvas::Program<Message> for Sketch {
             let full = iced::Rectangle::with_size(frame.size());
             frame.with_clip(full, |frame| {
                 frame.fill_rectangle(Point::ORIGIN, frame.size(), self.paint(self.background));
+                if let Some(grid) = self.grid {
+                    self.draw_grid(frame, grid);
+                }
             });
             self.draw_ids(frame, below, view, &HashMap::new());
         });

@@ -159,6 +159,7 @@ mod clipboard;
 mod create;
 mod frame;
 mod freedraw;
+mod grid;
 mod order;
 mod regressions;
 mod style;

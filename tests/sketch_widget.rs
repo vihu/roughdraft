@@ -407,7 +407,7 @@ fn the_style_panel_keeps_its_width_with_arrowhead_choices() {
 }
 
 #[test]
-fn the_main_menu_asks_the_host_and_switches_the_theme() {
+fn the_main_menu_asks_the_host_and_switches_the_grid_and_theme() {
     let mut sketch = Sketch::new(Scene::default());
     sketch.set_menu(vec![roughdraft::widget::Request::Save]);
     // The menu button sits in the top-left corner.
@@ -435,6 +435,15 @@ fn the_main_menu_asks_the_host_and_switches_the_theme() {
     for message in messages {
         let _ = sketch.update(message);
     }
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(30.0, 30.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    });
+    run(&mut sketch, |ui| {
+        ui.click("Show grid").expect("the grid switch");
+    });
+    assert!(sketch.scene().grid().is_some());
     run(&mut sketch, |ui| {
         ui.point_at(Point::new(30.0, 30.0));
         ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);

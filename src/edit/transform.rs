@@ -267,7 +267,14 @@ impl Editor {
             let which = match (point, midpoint) {
                 (Some(which), _) => which,
                 (None, Some((insert, middle))) => {
-                    self.insert_point(index, insert, middle);
+                    // On the grid, the new point starts at the pointer's grid
+                    // point (`addMidpoint`).
+                    let point = if self.grid_size(modifiers).is_some() {
+                        self.snap(at, modifiers)
+                    } else {
+                        middle
+                    };
+                    self.insert_point(index, insert, point);
                     if let Some(edit) = &mut self.line_edit {
                         edit.selected.clear();
                     }
@@ -350,6 +357,19 @@ impl Editor {
                 frame,
                 offset,
             }) => {
+                // The handle, not the pointer, lands on the grid: snap where
+                // it would go and keep the grab offset (`getResizeOffsetXY`).
+                let local = frame.transform.inverse().apply(at);
+                let handle_at = frame
+                    .transform
+                    .apply([local[0] - offset[0], local[1] - offset[1]]);
+                let snapped = frame
+                    .transform
+                    .inverse()
+                    .apply(self.snap(handle_at, modifiers));
+                let at = frame
+                    .transform
+                    .apply([snapped[0] + offset[0], snapped[1] + offset[1]]);
                 if start
                     .iter()
                     .filter(|(_, e)| container_id(e).is_none())
@@ -374,7 +394,10 @@ impl Editor {
                 start,
                 center,
             }) => {
-                // Snapped, then normalised, like `rotateSingleElement`.
+                // The pointer on the grid (`maybeHandleResize`); the angle
+                // snapped with Shift, then normalised, like
+                // `rotateSingleElement`.
+                let at = self.snap(at, modifiers);
                 let mut angle = 5.0 * PI / 2.0 + (at[1] - center[1]).atan2(at[0] - center[0]);
                 if modifiers.shift {
                     angle += LOCK_ANGLE / 2.0;
@@ -407,7 +430,7 @@ impl Editor {
                 from,
                 starts,
             }) => {
-                self.drag_line_points(index, from, &starts, at);
+                self.drag_line_points(index, from, &starts, at, modifiers);
                 self.gesture = Some(Gesture::Points {
                     index,
                     before,

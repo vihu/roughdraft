@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::{Value, json};
 
-use super::{Editor, common_bounds};
+use super::{Editor, Modifiers, common_bounds};
 use crate::geometry::Point;
 use crate::hit::container_id;
 use crate::scene::Element;
@@ -78,7 +78,12 @@ impl Editor {
         }
 
         let [x1, y1, x2, y2] = common_bounds(elements.iter());
-        let offset = [at[0] - (x2 - x1) / 2.0 - x1, at[1] - (y2 - y1) / 2.0 - y1];
+        // Centred on `at`, the top-left on the grid (`addElementsFromPasteOrLibrary`).
+        let corner = self.snap(
+            [at[0] - (x2 - x1) / 2.0, at[1] - (y2 - y1) / 2.0],
+            Modifiers::default(),
+        );
+        let offset = [corner[0] - x1, corner[1] - y1];
         let ids: HashMap<String, String> = elements
             .iter()
             .map(|e| (e.base.id.clone(), crate::random::id()))
@@ -132,6 +137,8 @@ impl Editor {
         let file_id = crate::random::id();
         self.scene.insert_file(&file_id, mime, data_url);
         let [width, height] = size;
+        // Centred on `at`'s grid point (`createImageElement`).
+        let at = self.snap(at, Modifiers::default());
         let mut base = self.style.base([at[0] - width / 2.0, at[1] - height / 2.0]);
         base.width = width;
         base.height = height;

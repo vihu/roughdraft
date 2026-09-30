@@ -4,6 +4,7 @@
 //! [`Sketch::view`] mapped to your message type, and pass its messages back
 //! to [`Sketch::update`].
 mod camera;
+mod grid;
 mod icons;
 mod keys;
 mod layers;
@@ -29,7 +30,7 @@ use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Pointer};
 use crate::geometry::{self, Bounds};
 use crate::render::Drawing;
-use crate::scene::Scene;
+use crate::scene::{Grid, Scene};
 
 pub use self::menu::Request;
 pub use crate::fonts::EXCALIFONT;
@@ -52,6 +53,8 @@ pub struct Sketch {
     /// Drawn element ids in draw order.
     order: Vec<String>,
     active: Vec<String>,
+    /// The grid drawn on the `below` layer, if on.
+    grid: Option<Grid>,
     below: canvas::Cache,
     above: canvas::Cache,
     background: Rgba,
@@ -152,6 +155,7 @@ impl Sketch {
             drawings: HashMap::new(),
             order: Vec::new(),
             active: Vec::new(),
+            grid: None,
             below: canvas::Cache::new(),
             above: canvas::Cache::new(),
             background,

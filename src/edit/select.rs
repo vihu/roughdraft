@@ -2,6 +2,7 @@
 //! (REFERENCE-001 sections 3 and 6).
 use std::collections::{HashMap, HashSet};
 
+use super::grid::to_grid;
 use super::{Editor, Gesture, Modifiers, common_bounds, normalize};
 use crate::geometry::{self, Point};
 use crate::hit::{self, container_id};
@@ -90,10 +91,13 @@ impl Editor {
                 return;
             }
         };
+        let starts = self.moving_with_children();
+        let [x1, y1, ..] = common_bounds(starts.iter().map(|&(i, _)| &self.scene.elements[i]));
         self.gesture = Some(Gesture::Move {
             from: at,
             before: self.scene.elements.clone(),
-            starts: self.moving_with_children(),
+            starts,
+            corner: [x1, y1],
             moved: false,
             clicked,
             duplicated: false,
@@ -170,10 +174,12 @@ impl Editor {
         {
             self.alt_duplicate();
         }
+        let grid = self.grid_size(modifiers);
         match &mut self.gesture {
             Some(Gesture::Move {
                 from,
                 starts,
+                corner,
                 moved,
                 ..
             }) => {
@@ -187,6 +193,11 @@ impl Editor {
                     return true;
                 }
                 *moved = true;
+                // The top-left lands on the grid (`calculateOffset`).
+                if let Some(size) = grid {
+                    offset = [0, 1]
+                        .map(|axis| to_grid(corner[axis] + offset[axis], size) - corner[axis]);
+                }
                 let targets: Vec<(usize, Point)> = starts
                     .iter()
                     .map(|&(i, [x, y])| (i, [x + offset[0], y + offset[1]]))

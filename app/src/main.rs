@@ -33,7 +33,9 @@
 //!   image.
 //! - View: Space-drag, middle-drag or the scroll wheel pan; Ctrl+scroll
 //!   zooms; Ctrl+= / Ctrl+- / Ctrl+0 step and reset the zoom; Shift+1 fits
-//!   everything, Shift+2 / Shift+3 the selection; Alt+Shift+D dark mode.
+//!   everything, Shift+2 / Shift+3 the selection; Alt+Shift+D dark mode;
+//!   Ctrl+' shows the grid, which drawing and moving snap to (hold Ctrl to
+//!   place freely), also in the menu.
 use std::path::PathBuf;
 
 use iced::keyboard::{self, key};
