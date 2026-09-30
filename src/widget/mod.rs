@@ -229,9 +229,14 @@ impl Sketch {
                 Task::none()
             }
             Input::ColorText(field, text) => {
-                // Applied as soon as it is a whole hex colour.
-                let css = format!("#{}", text.trim().trim_start_matches('#'));
-                if Rgba::parse(&css).is_some() {
+                // Applied as soon as it is a whole colour: hex with or without
+                // `#`, else any CSS colour as typed (Excalidraw's `getColor`).
+                let typed = text.trim();
+                let hex = format!("#{}", typed.trim_start_matches('#'));
+                let css = [hex, typed.to_owned()]
+                    .into_iter()
+                    .find(|css| Rgba::parse(css).is_some());
+                if let Some(css) = css {
                     self.editor.apply_style(field.change(css));
                 }
                 self.color_draft = Some((field, text));

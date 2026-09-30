@@ -344,7 +344,7 @@ impl Sketch {
             Some((draft, text)) if *draft == field => text.clone(),
             _ => current.to_owned(),
         };
-        let hex = text_input("#hex", typed)
+        let hex = text_input("#hex or name", typed)
             .on_input(move |text| Message(Input::ColorText(field, text)))
             .size(12)
             .padding([2, 6])
