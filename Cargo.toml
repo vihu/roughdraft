@@ -1,6 +1,7 @@
 [package]
 description  = "Excalidraw-compatible hand-drawn sketch canvas for iced"
 edition      = "2024"
+license      = "MIT"
 name         = "roughdraft"
 publish      = false
 rust-version = "1.93"

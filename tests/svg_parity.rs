@@ -7,8 +7,8 @@
 //! Compared per path and text line, in draw order: path commands and
 //! coordinates (Excalidraw rounds to 2 decimals), stroke and fill colors with
 //! opacity, stroke width, dash pattern, element transform, and text position,
-//! anchor, size and content. Keeprs memos from `ROUGHDRAFT_EXTRA_FIXTURES`
-//! are compared against the SVG Keeprs stored with them.
+//! anchor, size and content. Scenes from `ROUGHDRAFT_EXTRA_FIXTURES` are
+//! compared the same way when they have an SVG next to them.
 mod common;
 
 use std::path::Path;

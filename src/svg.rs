@@ -1,7 +1,7 @@
 //! Scene to SVG, shaped like Excalidraw's `exportToSvg`: a background, one
 //! group per element with its rough paths (coordinates to 2 decimals) and
 //! text lines, frame titles and outlines, and frame children clipped to
-//! their frame. This is the preview Keeprs stores next to each sketch.
+//! their frame. Hosts can store it as a preview next to each drawing.
 use std::fmt::Write as _;
 
 use crate::color::Rgba;

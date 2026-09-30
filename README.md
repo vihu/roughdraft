@@ -12,8 +12,8 @@ in excalidraw.com unchanged, and the other way round.
 - An iced-free core (`scene`, `render`, `edit`, `svg`), so scenes can be
   edited, tested and exported to SVG without a window.
 
-Status: 0.1.0, not published. Targets Linux (Wayland) and macOS. The first
-consumer is the Keeprs native client.
+Status: 0.1.0, not published. Targets Linux (Wayland) and macOS. It is both
+a library for iced apps and, through the playground, a standalone editor.
 
 ## Embedding
 
@@ -131,9 +131,11 @@ mode.
 
 ## Licence
 
-Not decided yet. The bundled fonts keep their own licences, next to each
-font under `assets/fonts/`: Excalifont, Virgil, Nunito and Lilita One are
-under the SIL Open Font License 1.1, Comic Shanns under MIT.
+MIT, see `LICENSE`. Ports of Excalidraw and perfect-freehand code keep
+their MIT notices (`THIRD-PARTY-NOTICES.md`). The bundled fonts keep their
+own licences, next to each font under `assets/fonts/`: Excalifont, Virgil,
+Nunito and Lilita One are under the SIL Open Font License 1.1, Comic
+Shanns under MIT.
 
 [iced]: https://github.com/iced-rs/iced
 [Excalidraw]: https://excalidraw.com

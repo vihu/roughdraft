@@ -19,7 +19,7 @@ pub(super) struct Picture {
 // Public API
 impl Sketch {
     /// Supplies the picture for an image file the scene does not embed (for
-    /// hosts that store images elsewhere, such as Keeprs). `bytes` is an
+    /// hosts that store images elsewhere). `bytes` is an
     /// encoded image (PNG, JPEG, GIF, WebP); undecodable bytes keep the
     /// placeholder.
     pub fn set_image(&mut self, file_id: &str, bytes: &[u8]) {

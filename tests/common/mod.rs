@@ -1,9 +1,9 @@
 //! Fixture loading shared by the scene tests.
 //!
 //! Always reads `tests/fixtures/scenes/<name>.excalidraw` (+ `<name>.svg`).
-//! When `ROUGHDRAFT_EXTRA_FIXTURES` names a directory, also reads the Keeprs
-//! sketch memos in it (`{"excalidraw": scene, "svg": ...}` per `.json` file),
-//! so private sketches can be checked without committing them.
+//! When `ROUGHDRAFT_EXTRA_FIXTURES` names a directory, also reads the scenes
+//! in it the same way, so private drawings can be checked without
+//! committing them.
 // Each test binary uses a different subset of these items.
 #![allow(dead_code)]
 use std::path::{Path, PathBuf};
@@ -19,32 +19,24 @@ pub struct Fixture {
 
 pub fn fixtures() -> Vec<Fixture> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenes");
-    let mut fixtures: Vec<Fixture> = files(&dir, "excalidraw")
+    let mut fixtures = scenes(&dir);
+    assert!(!fixtures.is_empty(), "no fixtures in {}", dir.display());
+    if let Some(extra) = std::env::var_os("ROUGHDRAFT_EXTRA_FIXTURES") {
+        fixtures.extend(scenes(Path::new(&extra)));
+    }
+    fixtures
+}
+
+/// Every `<name>.excalidraw` in `dir`, with `<name>.svg` when there is one.
+fn scenes(dir: &Path) -> Vec<Fixture> {
+    files(dir, "excalidraw")
         .into_iter()
         .map(|path| Fixture {
             name: name(&path),
             scene: read_json(&path),
             svg: std::fs::read_to_string(path.with_extension("svg")).ok(),
         })
-        .collect();
-    assert!(!fixtures.is_empty(), "no fixtures in {}", dir.display());
-
-    if let Some(extra) = std::env::var_os("ROUGHDRAFT_EXTRA_FIXTURES") {
-        for path in files(Path::new(&extra), "json") {
-            let mut memo = read_json(&path);
-            let scene = match memo["excalidraw"].take() {
-                Value::String(nested) => serde_json::from_str(&nested).unwrap(),
-                scene => scene,
-            };
-            let svg = memo["svg"].as_str().map(str::to_owned);
-            fixtures.push(Fixture {
-                name: name(&path),
-                scene,
-                svg,
-            });
-        }
-    }
-    fixtures
+        .collect()
 }
 
 fn files(dir: &Path, extension: &str) -> Vec<PathBuf> {

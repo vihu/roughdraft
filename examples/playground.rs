@@ -1,5 +1,4 @@
-//! Playground: open, edit and save `.excalidraw` files (or view an exported
-//! Keeprs sketch memo).
+//! Playground: open, edit and save `.excalidraw` files.
 //!
 //! ```text
 //! cargo run --release --example playground -- [file]
@@ -10,8 +9,7 @@
 //!
 //! - Files: the menu in the top-left corner (open, save, save as, export
 //!   SVG, insert image, dark/light), or Ctrl+O open, Ctrl+S save (asks where
-//!   for new files and Keeprs memos), Ctrl+Shift+S save as, 9 insert an
-//!   image file. The title shows `*` while there are unsaved changes.
+//!   for new files), Ctrl+Shift+S save as, 9 insert an image file. The title shows `*` while there are unsaved changes.
 //! - Tools: V or 1 select, H hand, R or 2 rectangle, D or 3 diamond, O or 4
 //!   ellipse, A or 5 arrow, L or 6 line, T or 8 text, E or 0 eraser (drag
 //!   across elements; Alt un-marks), F frame (takes in what is wholly
@@ -49,9 +47,9 @@ use iced::{Element, Subscription, Task};
 use roughdraft::scene::Scene;
 use roughdraft::svg::{self, SvgOptions};
 use roughdraft::widget::{self, Appearance, Request, Sketch};
-use serde_json::Value;
 
-const USAGE: &str = "usage: playground [file.excalidraw | keeprs-memo.json] [--snapshot out.png] [--dark] [--origin x,y]";
+const USAGE: &str =
+    "usage: playground [file.excalidraw] [--snapshot out.png] [--dark] [--origin x,y]";
 
 /// Snapshot size in logical pixels.
 const SNAPSHOT_SIZE: (f32, f32) = (1024.0, 768.0);
@@ -87,7 +85,7 @@ pub fn main() -> iced::Result {
         let result = file
             .ok_or_else(|| USAGE.to_owned())
             .and_then(|f| load(&f))
-            .and_then(|(scene, _)| {
+            .and_then(|scene| {
                 let mut sketch = Sketch::new(scene);
                 sketch.set_appearance(appearance);
                 if let Some(origin) = origin {
@@ -114,7 +112,7 @@ pub fn main() -> iced::Result {
 }
 
 struct Playground {
-    /// Where Ctrl+S writes; `None` for a new scene or a Keeprs memo.
+    /// Where Ctrl+S writes; `None` for a new scene.
     path: Option<PathBuf>,
     sketch: Sketch,
     error: Option<String>,
@@ -145,7 +143,7 @@ impl Playground {
     fn open(file: Option<PathBuf>, appearance: Appearance) -> Self {
         let (scene, path, error) = match file.as_deref().map(load) {
             None => (Scene::default(), None, None),
-            Some(Ok((scene, writable))) => (scene, file.filter(|_| writable), None),
+            Some(Ok(scene)) => (scene, file, None),
             Some(Err(error)) => (Scene::default(), None, Some(error)),
         };
         let mut sketch = Sketch::new(scene);
@@ -289,22 +287,11 @@ impl Playground {
     }
 }
 
-/// Reads a scene file, unwrapping a Keeprs sketch memo
-/// (`{"excalidraw": scene, "svg": ..., "savedInDarkMode": ...}`) if needed.
-/// Also returns whether saving back to the same path keeps its format.
-fn load(path: &std::path::Path) -> Result<(Scene, bool), String> {
+/// Reads a scene file.
+fn load(path: &std::path::Path) -> Result<Scene, String> {
     let fail = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
     let json = std::fs::read_to_string(path).map_err(|e| fail(&e))?;
-    let mut value: Value = serde_json::from_str(&json).map_err(|e| fail(&e))?;
-    let memo = value.get("excalidraw").is_some();
-    if let Some(inner) = value.get_mut("excalidraw").map(Value::take) {
-        value = match inner {
-            Value::String(nested) => serde_json::from_str(&nested).map_err(|e| fail(&e))?,
-            other => other,
-        };
-    }
-    let scene = serde_json::from_value(value).map_err(|e| fail(&e))?;
-    Ok((scene, !memo))
+    serde_json::from_str(&json).map_err(|e| fail(&e))
 }
 
 async fn pick_file() -> Option<PathBuf> {
