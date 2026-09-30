@@ -97,8 +97,8 @@ fn draw_text(
     }
 }
 
-/// Maps an Excalidraw font id to a font iced can load.
-// ponytail: only Excalifont is bundled; add Virgil, Cascadia, Nunito, ... when a fixture needs them
+/// Maps an Excalidraw `fontFamily` id to a font iced can load (see
+/// [`crate::fonts`]).
 pub(super) fn font(family: u32) -> Font {
     match family {
         1 => Font::new("Virgil"),

@@ -29,8 +29,13 @@ impl Editor {
             .into_iter()
             .map(|(i, _)| &self.scene.elements[i])
             .collect();
-        // ponytail: no `files` yet; images come with slice 09
-        let clipboard = json!({ "type": CLIPBOARD_TYPE, "elements": elements });
+        // The image files the copied elements use travel with them.
+        let files: serde_json::Map<String, Value> = elements
+            .iter()
+            .filter_map(|e| e.file_id())
+            .filter_map(|id| Some((id.to_owned(), self.scene.file(id)?.clone())))
+            .collect();
+        let clipboard = json!({ "type": CLIPBOARD_TYPE, "elements": elements, "files": files });
         Some(clipboard.to_string())
     }
 
@@ -84,6 +89,11 @@ impl Editor {
         }
 
         self.history.record(self.scene.elements.clone());
+        // ponytail: files are not undone with the paste; `saved` drops them
+        // once no live image uses them.
+        for (id, file) in value["files"].as_object().into_iter().flatten() {
+            self.scene.add_missing_file(id, file.clone());
+        }
         self.selected = elements
             .iter()
             .filter(|e| container_id(e).is_none())

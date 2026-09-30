@@ -48,7 +48,14 @@ impl Editor {
         let resized = scale_element(original, frame, bounds);
         self.scene.elements[*index] = resized;
         self.scene.elements[*index].touch();
-        self.sync_labels(start);
+        // The label re-wraps to the new width; the shape grows to fit it,
+        // upward when pulled by a top handle (`handleBindTextResize`).
+        // ponytail: no minimum size and no font scaling with Shift, which
+        // Excalidraw applies to labelled shapes.
+        let from_top = matches!(handle, Handle::N | Handle::Nw | Handle::Ne);
+        for (label, _) in start.iter().filter(|(_, e)| container_id(e).is_some()) {
+            self.rewrap_label(*label, from_top);
+        }
     }
 
     /// Scales several elements about the opposite side or corner of their
@@ -207,8 +214,10 @@ impl Editor {
     }
 
     /// Puts labels back inside their containers after a resize or rotation:
-    /// aligned per `textAlign`/`verticalAlign`, same angle.
-    // ponytail: aligns within the container's full box; Excalidraw insets ellipses and diamonds and re-wraps the text (slice 05)
+    /// aligned per `textAlign`/`verticalAlign`, same angle; arrow labels on
+    /// the arrow's middle.
+    // ponytail: aligns within the container's full box; Excalidraw insets
+    // top/bottom/left/right-aligned labels further in ellipses and diamonds
     pub(super) fn sync_labels(&mut self, start: &[(usize, Element)]) {
         for (label_index, _) in start.iter().filter(|(_, e)| container_id(e).is_some()) {
             let label = &self.scene.elements[*label_index];
@@ -223,23 +232,25 @@ impl Editor {
             let Kind::Text(text) = &label.kind else {
                 continue;
             };
+            let (w, h) = (label.base.width, label.base.height);
             let is_arrow = matches!(container.kind, Kind::Arrow(_));
-            let [x1, y1, x2, y2] = if is_arrow {
-                geometry::element_bounds(container)
+            let (x, y) = if let Kind::Arrow(line) = &container.kind {
+                let [mx, my] = arrow_label_centre(container, &line.points);
+                (mx - w / 2.0, my - h / 2.0)
             } else {
                 let b = &container.base;
-                [b.x, b.y, b.x + b.width, b.y + b.height]
-            };
-            let (w, h) = (label.base.width, label.base.height);
-            let x = match (is_arrow, &text.text_align) {
-                (false, TextAlign::Left) => x1 + LABEL_PADDING,
-                (false, TextAlign::Right) => x2 - LABEL_PADDING - w,
-                _ => (x1 + x2 - w) / 2.0,
-            };
-            let y = match (is_arrow, &text.vertical_align) {
-                (false, VerticalAlign::Top) => y1 + LABEL_PADDING,
-                (false, VerticalAlign::Bottom) => y2 - LABEL_PADDING - h,
-                _ => (y1 + y2 - h) / 2.0,
+                let [x1, y1, x2, y2] = [b.x, b.y, b.x + b.width, b.y + b.height];
+                let x = match &text.text_align {
+                    TextAlign::Left => x1 + LABEL_PADDING,
+                    TextAlign::Right => x2 - LABEL_PADDING - w,
+                    _ => (x1 + x2 - w) / 2.0,
+                };
+                let y = match &text.vertical_align {
+                    VerticalAlign::Top => y1 + LABEL_PADDING,
+                    VerticalAlign::Bottom => y2 - LABEL_PADDING - h,
+                    _ => (y1 + y2 - h) / 2.0,
+                };
+                (x, y)
             };
             let angle = if is_arrow {
                 label.base.angle
@@ -389,4 +400,21 @@ fn scale_element(original: &Element, frame: &Frame, bounds: Bounds) -> Element {
 /// Maps an angle into `[0, 2π)`.
 pub(super) fn normalize_angle(angle: f64) -> f64 {
     angle.rem_euclid(TAU)
+}
+
+/// Where an arrow's label is centred (`getBoundTextElementPosition`): its
+/// middle point, or the middle of its middle segment.
+// ponytail: straight segment midpoint; Excalidraw takes the curve's
+// midpoint on round arrows with an even number of 4+ points.
+fn arrow_label_centre(arrow: &Element, points: &[Point]) -> Point {
+    let transform = geometry::element_transform(arrow);
+    let n = points.len();
+    if n % 2 == 1 {
+        return transform.apply(points[n / 2]);
+    }
+    let (a, b) = (
+        transform.apply(points[n / 2 - 1]),
+        transform.apply(points[n / 2]),
+    );
+    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
 }

@@ -274,13 +274,6 @@ impl Scene {
     /// Adds an image file (`files[id]`), as Excalidraw stores it.
     pub fn insert_file(&mut self, id: &str, mime: &str, data_url: String) {
         let now = now_ms();
-        let files = self
-            .json
-            .entry("files")
-            .or_insert_with(|| Value::Object(Map::new()));
-        if !files.is_object() {
-            *files = Value::Object(Map::new());
-        }
         let file = serde_json::json!({
             "mimeType": mime,
             "id": id,
@@ -288,10 +281,30 @@ impl Scene {
             "created": now,
             "lastRetrieved": now,
         });
-        files
-            .as_object_mut()
-            .expect("made an object above")
-            .insert(id.into(), file);
+        self.files_mut().insert(id.into(), file);
+    }
+
+    /// Returns the stored record of an image file (`files[id]`).
+    pub(crate) fn file(&self, id: &str) -> Option<&Value> {
+        self.json.get("files")?.get(id)
+    }
+
+    /// Adds a file record unless the scene has one with that id
+    /// (`addMissingFiles`).
+    pub(crate) fn add_missing_file(&mut self, id: &str, file: Value) {
+        self.files_mut().entry(id).or_insert(file);
+    }
+
+    /// `files`, created when missing or not an object.
+    fn files_mut(&mut self) -> &mut Map<String, Value> {
+        let files = self
+            .json
+            .entry("files")
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !files.is_object() {
+            *files = Value::Object(Map::new());
+        }
+        files.as_object_mut().expect("made an object above")
     }
 
     /// Returns `appState.viewBackgroundColor`, white when unset.

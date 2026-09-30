@@ -124,3 +124,31 @@ fn inserted_image_fits_600_renders_exports_and_prunes_on_save() {
     editor.command(Command::Undo);
     assert!(editor.scene().saved().file_data_url(&file_id).is_some());
 }
+
+#[test]
+fn copied_images_carry_their_files_to_another_editor() {
+    let mut from = editor();
+    from.insert_image(
+        "data:image/png;base64,TWFu".into(),
+        "image/png",
+        [10.0, 10.0],
+        [0.0, 0.0],
+    );
+    let json = from.copy().unwrap();
+    let file_id = from
+        .scene()
+        .elements
+        .last()
+        .unwrap()
+        .file_id()
+        .unwrap()
+        .to_owned();
+
+    let mut to = crate::edit::Editor::new(crate::scene::Scene::default());
+    assert!(to.paste(&json, [100.0, 100.0]));
+    assert_eq!(to.scene().elements[0].file_id(), Some(file_id.as_str()));
+    assert_eq!(
+        to.scene().file_data_url(&file_id),
+        Some("data:image/png;base64,TWFu")
+    );
+}

@@ -111,3 +111,20 @@ fn centred_text_grows_around_its_centre() {
     let x = editor.editing().unwrap().base.x;
     assert_eq!(x, 100.0 - 11.0);
 }
+
+#[test]
+fn arrow_label_sits_on_the_middle_point_not_the_box_centre() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Arrow));
+    for at in [[0.0, 200.0], [100.0, 200.0], [100.0, 300.0]] {
+        editor.pointer(Pointer::Move, at, NONE);
+        click(&mut editor, at);
+    }
+    editor.command(Command::Finish);
+    editor.double_click([50.0, 200.0]);
+    editor.set_text("hi");
+    editor.finish_text();
+    let label = editor.scene().elements.last().unwrap();
+    // ApproxMeasure: 22 x 25, centred on the corner point (100, 200).
+    assert_eq!((label.base.x, label.base.y), (89.0, 187.5));
+}

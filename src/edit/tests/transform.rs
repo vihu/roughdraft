@@ -101,8 +101,42 @@ fn resizing_a_container_recentres_its_label() {
     let se = handle(&editor, Handle::Se);
     drag(&mut editor, se, by(se, [100.0, 50.0]), NONE);
     let label = &editor.scene().elements[2].base;
-    // Box 200..400 x 0..100; the label is 100 x 50.
-    assert_eq!((label.x, label.y), (250.0, 25.0));
+    // Box 200..400 x 0..100; "hi" re-measures to 22 x 25.
+    assert_eq!((label.x, label.y), (289.0, 37.5));
+}
+
+#[test]
+fn resizing_a_labelled_shape_rewraps_and_grows_it_away_from_the_handle() {
+    let mut editor = editor();
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    editor.set_text("hello world foo");
+    editor.finish_text();
+    // Wrapped to 3 lines; a is 100 x 85.
+    editor.command(Command::Tool(Tool::Selection));
+    select_a(&mut editor);
+    assert!(editor.is_selected("a"));
+    // The right border, like `handles_sit_where_excalidraw_draws_them`.
+    assert_eq!(editor.handle_at([104.0, 42.5]), Some(Handle::E));
+    drag(&mut editor, [104.0, 42.5], [304.0, 42.5], NONE);
+    let label = editor.scene().elements.last().unwrap();
+    let Kind::Text(text) = &label.kind else {
+        panic!("label")
+    };
+    assert_eq!(text.text, "hello world foo", "one line in 300 - 10");
+    assert_eq!(box_of(&editor, 0), (0.0, 0.0, 300.0, 85.0), "never shrinks");
+
+    // Narrow it from the top-left corner: 40 fits 3 characters, so long
+    // words break; 5 lines need 135, and a grows up.
+    let nw = handle(&editor, Handle::Nw);
+    drag(&mut editor, nw, by(nw, [250.0, 0.0]), NONE);
+    let Kind::Text(text) = &editor.scene().elements.last().unwrap().kind else {
+        panic!("label")
+    };
+    assert_eq!(text.text, "hel\nlo\nwor\nld\nfoo");
+    let (x, y, w, h) = box_of(&editor, 0);
+    assert_eq!((x, w), (250.0, 50.0));
+    assert_eq!((y + h, h), (85.0, 135.0), "bottom edge kept");
 }
 
 #[test]

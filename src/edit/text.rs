@@ -172,6 +172,25 @@ impl Editor {
         }
     }
 
+    /// Re-wraps a label to its container after a resize; a container that
+    /// has to grow keeps its bottom edge when `from_top`.
+    pub(super) fn rewrap_label(&mut self, index: usize, from_top: bool) {
+        let Some(container) = container_id(&self.scene.elements[index])
+            .and_then(|id| self.scene.elements.iter().position(|e| e.base.id == id))
+        else {
+            return;
+        };
+        let height = self.scene.elements[container].base.height;
+        let original = self.scene.elements[index].original_text().to_owned();
+        self.layout_text(index, &original);
+        let grown = self.scene.elements[container].base.height - height;
+        if from_top && grown > 0.0 {
+            self.scene.elements[container].base.y -= grown;
+            let start = vec![(index, self.scene.elements[index].clone())];
+            self.sync_labels(&start);
+        }
+    }
+
     /// Pastes plain text as a new text element centred on `at`.
     pub(super) fn paste_text(&mut self, text: &str, at: Point) -> bool {
         if text.trim().is_empty() {
