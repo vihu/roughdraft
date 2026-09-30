@@ -8,6 +8,7 @@ use iced::mouse::{self, ScrollDelta};
 use iced::widget::canvas::{self, Event, Frame, Geometry};
 use iced::{Point, Rectangle, Renderer, Theme};
 
+use super::camera::zoom_key;
 use super::{Input, Message, Sketch, shortcut};
 use crate::edit::{self, Handle, Pointer, Tool};
 
@@ -71,7 +72,19 @@ impl canvas::Program<Message> for Sketch {
                 state.space = false;
                 Some(canvas::Action::request_redraw().and_capture())
             }
-            Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                physical_key,
+                ..
+            }) => {
+                let zoom = match physical_key {
+                    keyboard::key::Physical::Code(code) => zoom_key(*code, *modifiers),
+                    keyboard::key::Physical::Unidentified(_) => None,
+                };
+                if let Some(zoom) = zoom {
+                    return publish(Input::ZoomKey(zoom));
+                }
                 let clipboard = match key.as_ref() {
                     Key::Character(c) if modifiers.command() => match c.to_lowercase().as_str() {
                         "c" => Some(Input::Copy),

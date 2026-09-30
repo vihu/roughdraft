@@ -3,6 +3,7 @@
 //! Embed it the usual iced way: keep a [`Sketch`] in your state, show
 //! [`Sketch::view`] mapped to your message type, and pass its messages back
 //! to [`Sketch::update`].
+mod camera;
 mod overlay;
 mod paint;
 mod program;
@@ -16,9 +17,11 @@ use iced::widget::canvas::{self, Canvas, Frame};
 use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
+use camera::{Camera, ZoomKey};
+
 use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Order, Pointer, Tool};
-use crate::geometry::{self, Affine};
+use crate::geometry::{self, Affine, Bounds};
 use crate::render::{self, Drawing, Item, Segment};
 use crate::scene::Scene;
 
@@ -38,9 +41,7 @@ pub enum Appearance {
 #[derive(Debug)]
 pub struct Sketch {
     editor: Editor,
-    /// Per element id: the revision it was rendered at, and its drawing
-    /// (`None` for types not drawn yet).
-    drawings: HashMap<String, ((i64, i64), Option<Drawing>)>,
+    drawings: HashMap<String, Rendered>,
     /// Drawn element ids in draw order.
     order: Vec<String>,
     active: Vec<String>,
@@ -58,11 +59,14 @@ pub struct Sketch {
     viewport: std::cell::Cell<iced::Size>,
 }
 
-/// Pan and zoom: the scene point at the canvas' top-left, and the scale.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Camera {
-    origin: [f64; 2],
-    zoom: f64,
+/// An element as last rendered.
+#[derive(Debug)]
+struct Rendered {
+    revision: (i64, i64),
+    /// `None` for types not drawn yet.
+    drawing: Option<Drawing>,
+    /// Box to cull against: the element's bounds plus [`CULL_MARGIN`].
+    extent: Bounds,
 }
 
 /// Input for a [`Sketch`], produced by its view.
@@ -82,6 +86,7 @@ enum Input {
         factor: f64,
         cursor: [f64; 2],
     },
+    ZoomKey(ZoomKey),
     /// A change from the style panel.
     Style(edit::StyleChange),
     /// An edit in the text overlay.
@@ -96,12 +101,13 @@ enum Input {
     PastedImage(geometry::Point, u32, u32, std::sync::Arc<Vec<u8>>),
 }
 
-/// Excalidraw's zoom limits.
-const ZOOM: std::ops::RangeInclusive<f64> = 0.1..=30.0;
-
 /// Gap between the content and the canvas edge on open, like Excalidraw's
 /// SVG export padding.
 const PADDING: f64 = 10.0;
+
+/// Scene units added around an element's box before culling it: covers the
+/// rough wobble, stroke width and arrowheads, which reach past the box.
+const CULL_MARGIN: f64 = 50.0;
 
 /// Screen pixels between an element and its selection border.
 const SELECTION_PADDING: f64 = 4.0;
@@ -172,10 +178,30 @@ impl Sketch {
                 return Task::none();
             }
             Input::Zoom { factor, cursor } => {
-                let zoom = (self.camera.zoom * factor).clamp(*ZOOM.start(), *ZOOM.end());
-                self.camera.origin = zoom_at(self.camera.origin, self.camera.zoom, zoom, cursor);
-                self.camera.zoom = zoom;
-                self.editor.set_zoom(zoom);
+                self.camera.zoom_about(self.camera.zoom * factor, cursor);
+                self.editor.set_zoom(self.camera.zoom);
+                self.clear_caches();
+                return Task::none();
+            }
+            Input::ZoomKey(key) => {
+                let size = self.viewport.get();
+                let viewport = [f64::from(size.width), f64::from(size.height)];
+                let selection = key != ZoomKey::FitAll && self.editor.selection().next().is_some();
+                let live = self
+                    .editor
+                    .scene()
+                    .elements
+                    .iter()
+                    .filter(|e| !e.base.is_deleted);
+                let targets: Vec<&crate::scene::Element> = if selection {
+                    self.editor.selection().collect()
+                } else {
+                    live.collect()
+                };
+                let bounds =
+                    (!targets.is_empty()).then(|| edit::common_bounds(targets.into_iter()));
+                self.camera.apply(key, viewport, bounds);
+                self.editor.set_zoom(self.camera.zoom);
                 self.clear_caches();
                 return Task::none();
             }
@@ -323,17 +349,27 @@ impl Sketch {
         for element in render::draw_order(scene) {
             let id = &element.base.id;
             let revision = element.revision();
-            let drawing = match previous.remove(id) {
-                Some((cached, drawing)) if cached == revision => drawing,
+            let rendered = match previous.remove(id) {
+                Some(cached) if cached.revision == revision => cached,
                 _ => {
                     static_changed |= !active.contains(id);
-                    render::render_element(element, background)
+                    let [x1, y1, x2, y2] = geometry::element_bounds(element);
+                    Rendered {
+                        revision,
+                        drawing: render::render_element(element, background),
+                        extent: [
+                            x1 - CULL_MARGIN,
+                            y1 - CULL_MARGIN,
+                            x2 + CULL_MARGIN,
+                            y2 + CULL_MARGIN,
+                        ],
+                    }
                 }
             };
-            if drawing.is_some() {
+            if rendered.drawing.is_some() {
                 order.push(id.clone());
             }
-            self.drawings.insert(id.clone(), (revision, drawing));
+            self.drawings.insert(id.clone(), rendered);
         }
         for element in scene.elements.iter().filter(|e| !e.base.is_deleted) {
             let Some(id) = element
@@ -362,7 +398,7 @@ impl Sketch {
     fn drawings(&self) -> impl Iterator<Item = &Drawing> {
         self.order
             .iter()
-            .filter_map(|id| self.drawings[id].1.as_ref())
+            .filter_map(|id| self.drawings[id].drawing.as_ref())
     }
 
     fn clear_caches(&self) {
@@ -379,9 +415,21 @@ impl Sketch {
     }
 
     fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
+        // Only what is in view, like Excalidraw's `getVisibleCanvasElements`.
+        let [ox, oy] = self.camera.origin;
+        let size = frame.size();
+        let (x2, y2) = (
+            ox + f64::from(size.width) / self.camera.zoom,
+            oy + f64::from(size.height) / self.camera.zoom,
+        );
+        let visible = |[a, b, c, d]: Bounds| a <= x2 && b <= y2 && c >= ox && d >= oy;
         // The element being typed is shown by the text overlay instead.
         let shown = ids.iter().filter(|id| self.editing.as_ref() != Some(*id));
-        for drawing in shown.filter_map(|id| self.drawings[id].1.as_ref()) {
+        let drawings = shown
+            .map(|id| &self.drawings[id])
+            .filter(|rendered| visible(rendered.extent))
+            .filter_map(|rendered| rendered.drawing.as_ref());
+        for drawing in drawings {
             let transform = drawing.transform.then(view);
             for item in &drawing.items {
                 match item {
@@ -442,29 +490,6 @@ impl Sketch {
             .opacity(opacity);
         frame.draw_image(bounds, image);
     }
-}
-
-impl Camera {
-    fn view(&self) -> Affine {
-        let [x, y] = self.origin;
-        Affine::translate([-x, -y]).then(Affine::scale(self.zoom))
-    }
-
-    /// Scene point under a window position.
-    fn scene_point(&self, bounds: iced::Rectangle, position: iced::Point) -> geometry::Point {
-        let [x, y] = self.origin;
-        [
-            x + f64::from(position.x - bounds.x) / self.zoom,
-            y + f64::from(position.y - bounds.y) / self.zoom,
-        ]
-    }
-}
-
-/// Returns the origin that keeps the scene point under `cursor` (canvas
-/// pixels) fixed while zooming from `from` to `to`.
-fn zoom_at(origin: [f64; 2], from: f64, to: f64, cursor: [f64; 2]) -> [f64; 2] {
-    let anchor = [origin[0] + cursor[0] / from, origin[1] + cursor[1] / from];
-    [anchor[0] - cursor[0] / to, anchor[1] - cursor[1] / to]
 }
 
 /// Decodes an image to RGBA up front: iced draws RGBA handles in the frame
@@ -572,19 +597,9 @@ fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, Tool, shortcut, zoom_at};
-
-    #[test]
-    fn zoom_keeps_point_under_cursor() {
-        let (origin, cursor) = ([-10.0, 40.0], [300.0, 200.0]);
-        let under = |origin: [f64; 2], zoom: f64| {
-            [origin[0] + cursor[0] / zoom, origin[1] + cursor[1] / zoom]
-        };
-        let zoomed = zoom_at(origin, 1.0, 2.5, cursor);
-        assert_eq!(under(zoomed, 2.5), under(origin, 1.0));
-        assert_eq!(zoom_at(origin, 2.0, 2.0, cursor), origin);
-    }
     use iced::keyboard::{Key, Modifiers, key::Named};
+
+    use super::{Command, Tool, shortcut};
 
     #[test]
     fn shortcuts_follow_excalidraw() {
