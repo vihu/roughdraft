@@ -123,8 +123,8 @@ impl Affine {
 /// Returns an element's local box: `[0, 0, width, height]`, or the points'
 /// box for lines and arrows (their points can go negative).
 pub fn local_bounds(element: &Element) -> Bounds {
-    match &element.kind {
-        Kind::Line(line) | Kind::Arrow(line) if !line.points.is_empty() => line.points.iter().fold(
+    let points_box = |points: &[Point]| {
+        points.iter().fold(
             [
                 f64::INFINITY,
                 f64::INFINITY,
@@ -132,7 +132,15 @@ pub fn local_bounds(element: &Element) -> Bounds {
                 f64::NEG_INFINITY,
             ],
             |[x1, y1, x2, y2], [x, y]| [x1.min(*x), y1.min(*y), x2.max(*x), y2.max(*y)],
-        ),
+        )
+    };
+    match &element.kind {
+        Kind::Line(line) | Kind::Arrow(line) if !line.points.is_empty() => points_box(&line.points),
+        // Pen strokes run any way from their first point, like lines.
+        Kind::Other(_) => match element.freedraw() {
+            Some(pen) if !pen.points.is_empty() => points_box(&pen.points),
+            _ => [0.0, 0.0, element.base.width, element.base.height],
+        },
         _ => [0.0, 0.0, element.base.width, element.base.height],
     }
 }

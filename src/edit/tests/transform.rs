@@ -273,3 +273,49 @@ fn line_editor_selects_drags_adds_and_deletes_points() {
     editor.command(Command::Undo);
     assert_eq!(points(&editor).len(), 4, "the delete was one undo step");
 }
+
+#[test]
+fn freedraw_strokes_select_on_their_path_and_resize_their_points() {
+    let json = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/scenes/freedraw.excalidraw"
+    ))
+    .unwrap();
+    let mut editor = Editor::new(serde_json::from_str::<Scene>(&json).unwrap());
+    let selected = |editor: &Editor| {
+        editor
+            .selection()
+            .map(|e| e.base.id.clone())
+            .collect::<Vec<_>>()
+    };
+    // On the scribble's wave (point 6 is at 18, 19.95).
+    drag(&mut editor, [18.0, 20.0], [18.0, 20.0], NONE);
+    assert_eq!(selected(&editor), ["scribble"]);
+    // Inside the filled loop, far from its outline.
+    drag(&mut editor, [170.0, 110.0], [170.0, 110.0], NONE);
+    assert_eq!(selected(&editor), ["loop"]);
+    // Beside the 2-point stroke from (380, 10) to (440, 40): nothing.
+    drag(&mut editor, [380.0, 40.0], [380.0, 40.0], NONE);
+    assert!(selected(&editor).is_empty());
+
+    drag(&mut editor, [410.0, 25.0], [410.0, 25.0], NONE);
+    assert_eq!(selected(&editor), ["two"]);
+    let se = handle(&editor, Handle::Se);
+    drag(&mut editor, se, by(se, [60.0, 30.0]), NONE);
+    let two = editor
+        .scene()
+        .elements
+        .iter()
+        .find(|e| e.base.id == "two")
+        .unwrap();
+    assert_eq!(two.freedraw().unwrap().points, [[0.0, 0.0], [120.0, 60.0]]);
+    assert_eq!(
+        (two.base.x, two.base.y, two.base.width, two.base.height),
+        (380.0, 10.0, 120.0, 60.0)
+    );
+    let saved = serde_json::to_string(editor.scene()).unwrap();
+    assert!(
+        saved.contains("[120,60]"),
+        "points keep JavaScript's number spelling"
+    );
+}

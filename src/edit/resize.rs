@@ -434,6 +434,33 @@ fn scale_element(original: &Element, frame: &Frame, bounds: Bounds) -> Element {
             element.base.width = (w0 * sx).abs();
             element.base.height = (h0 * sy).abs();
         }
+        Kind::Other(kind) if kind == "freedraw" => {
+            // Scaled about the box like a line's points, first point at x/y.
+            let sx = if w0 == 0.0 { 1.0 } else { (x2 - x1) / w0 };
+            let sy = if h0 == 0.0 { 1.0 } else { (y2 - y1) / h0 };
+            let mid = [(ox1 + ox2) / 2.0, (oy1 + oy2) / 2.0];
+            let points = original
+                .freedraw()
+                .map(|pen| pen.points)
+                .unwrap_or_default();
+            let scaled: Vec<Point> = points
+                .iter()
+                .map(|p| [(p[0] - mid[0]) * sx, (p[1] - mid[1]) * sy])
+                .collect();
+            let first = scaled.first().copied().unwrap_or_default();
+            let points: Vec<serde_json::Value> = scaled
+                .iter()
+                .map(|p| {
+                    let x = crate::scene::js_number(p[0] - first[0]);
+                    serde_json::Value::Array(vec![x, crate::scene::js_number(p[1] - first[1])])
+                })
+                .collect();
+            element.json_mut().insert("points".into(), points.into());
+            element.base.x = center[0] + first[0];
+            element.base.y = center[1] + first[1];
+            element.base.width = (w0 * sx).abs();
+            element.base.height = (h0 * sy).abs();
+        }
         kind => {
             let (w, h) = ((x2 - x1).abs(), (y2 - y1).abs());
             if let Kind::Text(text) = kind

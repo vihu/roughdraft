@@ -105,6 +105,21 @@ fn hits(element: &Element, labelled: bool, at: Point, threshold: f64) -> bool {
             let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]];
             polygon_hit(&corners, true, p, threshold, true)
         }
+        // Along the pen's path (half its drawn width counts), or inside a
+        // filled loop.
+        Kind::Other(kind) if kind == "freedraw" => {
+            let Some(pen) = element.freedraw() else {
+                return false;
+            };
+            let filled = !is_transparent(&element.base.background_color)
+                && crate::render::is_loop(&pen.points);
+            let reach = threshold + element.base.stroke_width * 4.25 / 2.0;
+            match &pen.points[..] {
+                [] => false,
+                [only] => (p[0] - only[0]).hypot(p[1] - only[1]) < reach,
+                points => polygon_hit(points, false, p, reach, filled),
+            }
+        }
         Kind::Other(_) => false,
     }
 }

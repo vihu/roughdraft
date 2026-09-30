@@ -87,7 +87,7 @@ fn write_back(json: &mut Map<String, Value>, typed: &impl Serialize) {
 }
 
 /// A number spelled the way `JSON.stringify` spells it.
-pub(super) fn js_number(value: f64) -> Value {
+pub(crate) fn js_number(value: f64) -> Value {
     js_numbers(serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number))
 }
 

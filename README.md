@@ -90,8 +90,10 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 | Files | Excalidraw 0.18 JSON, lossless; older scenes load with Excalidraw's restore defaults; `Scene::version` tells when there is something to save |
 | Export | SVG shaped like Excalidraw's `exportToSvg`, optionally with its fonts embedded |
 
-Not supported: freedraw, frames, embeds, laser, elbow arrow routing (drawn as
-polylines), editing an image's crop, snapping, collaboration. Elements of these types are
+Freedraw strokes made in Excalidraw are drawn (with perfect-freehand, exactly
+like Excalidraw) and can be selected, moved, resized and erased; there is no
+pen tool yet. Not supported: frames, embeds, laser, elbow arrow routing (drawn
+as polylines), editing an image's crop, snapping, collaboration. Elements of these types are
 kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
 bundled and render in the system sans or monospace font.
 

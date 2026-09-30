@@ -16,6 +16,7 @@ use crate::color::Rgba;
 use crate::geometry::{Affine, Point};
 use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
+mod freedraw;
 mod linear;
 mod shapes;
 mod text;
@@ -169,7 +170,7 @@ pub fn draw_order(scene: &Scene) -> Vec<&Element> {
 
 /// Draws one element; `background` is the canvas color, used by outlined
 /// arrowheads. Returns `None` for types this version does not draw
-/// (freedraw, frames, embeds, images without a file).
+/// (frames, embeds, images without a file).
 pub fn render_element(element: &Element, background: &str) -> Option<Drawing> {
     draw(element, background)
 }
@@ -226,6 +227,37 @@ fn draw(element: &Element, background: &str) -> Option<Drawing> {
         Kind::Text(text) => {
             items.push(Item::Text(text_block(element, text, opacity)));
             box_center
+        }
+        Kind::Other(kind) if kind == "freedraw" => {
+            let pen = element.freedraw()?;
+            // A closed stroke with a background gets a rough fill under it
+            // (`generateElementShape`, "freedraw").
+            if is_loop(&pen.points) && base.background_color != "transparent" {
+                let mut options = rough_options(element, false);
+                options.fill_style = Some(rough_fill(&base.fill_style));
+                options.fill = Some(base.background_color.clone());
+                options.stroke = Some("none".into());
+                let simplified = rough_rs::renderer::simplify(&pen.points, 0.75);
+                push_items(
+                    &mut items,
+                    &generator.curve(&simplified, Some(options)),
+                    opacity,
+                );
+            }
+            let path = freedraw::outline(
+                &pen.points,
+                &pen.pressures,
+                pen.simulate_pressure,
+                pen.complete,
+                base.stroke_width,
+            );
+            items.push(Item::Fill {
+                path,
+                color: color(&base.stroke_color, opacity),
+                rule: FillRule::NonZero,
+            });
+            let [x1, y1, x2, y2] = points_bounds(&pen.points);
+            [(x1 + x2) / 2.0, (y1 + y2) / 2.0]
         }
         Kind::Other(_) => {
             items.push(Item::Image {

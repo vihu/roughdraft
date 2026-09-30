@@ -132,6 +132,19 @@ pub struct Text {
     pub container_id: Option<String>,
 }
 
+/// A `freedraw` element's stroke, read from its JSON.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Freedraw {
+    /// Points relative to the element's `x`/`y`.
+    pub points: Vec<[f64; 2]>,
+    /// Pen pressure per point, used unless `simulate_pressure`.
+    pub pressures: Vec<f64>,
+    /// Whether pressure is simulated from the drawing speed.
+    pub simulate_pressure: bool,
+    /// Whether the stroke was finished (`lastCommittedPoint` is set).
+    pub complete: bool,
+}
+
 /// Corner rounding.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Roundness {
@@ -404,6 +417,36 @@ impl Element {
         ]
     }
 
+    /// Returns a `freedraw` element's pen stroke, if it is one.
+    pub fn freedraw(&self) -> Option<Freedraw> {
+        if !matches!(&self.kind, Kind::Other(kind) if kind == "freedraw") {
+            return None;
+        }
+        let pair = |p: &Value| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]);
+        let points = self
+            .json
+            .get("points")
+            .and_then(Value::as_array)
+            .map(|points| points.iter().filter_map(pair).collect())
+            .unwrap_or_default();
+        let pressures = self
+            .json
+            .get("pressures")
+            .and_then(Value::as_array)
+            .map(|p| p.iter().filter_map(Value::as_f64).collect())
+            .unwrap_or_default();
+        let flag = |key: &str| self.json.get(key).and_then(Value::as_bool);
+        Some(Freedraw {
+            points,
+            pressures,
+            simulate_pressure: flag("simulatePressure").unwrap_or(true),
+            complete: self
+                .json
+                .get("lastCommittedPoint")
+                .is_some_and(|p| !p.is_null()),
+        })
+    }
+
     /// Returns an image element's file id.
     pub fn file_id(&self) -> Option<&str> {
         match &self.kind {
@@ -484,7 +527,8 @@ mod new;
 mod refs;
 mod restore;
 
-use self::json::{js_number, now_ms};
+pub(crate) use self::json::js_number;
+use self::json::now_ms;
 pub use self::refs::{ArrowEnd, Binding};
 pub(crate) use self::restore::line_height;
 

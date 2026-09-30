@@ -26,11 +26,17 @@ fn random_sessions_keep_the_scene_valid() {
 }
 
 fn session(seed: u64) {
-    let fixture = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/scenes/l2-created.excalidraw"
-    ))
-    .unwrap();
+    // Odd sessions start from pen strokes, even ones from shapes and text.
+    let name = if seed % 2 == 1 {
+        "freedraw"
+    } else {
+        "l2-created"
+    };
+    let path = format!(
+        "{}/tests/fixtures/scenes/{name}.excalidraw",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let fixture = std::fs::read_to_string(path).unwrap();
     let mut editor = Editor::new(serde_json::from_str::<Scene>(&fixture).unwrap());
     let mut rng = Rng(seed);
     let mut clipboard: Option<String> = None;
