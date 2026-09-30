@@ -112,8 +112,16 @@ impl Editor {
             self.history.record(before);
         }
         self.selected.clear();
-        if !empty || container.is_some() {
-            self.selected.insert(container.unwrap_or(id));
+        // The container is selected, if it still exists (a cut or erase can
+        // have taken it while its label was being typed).
+        let shown = container.unwrap_or(id);
+        let live = self
+            .scene
+            .elements
+            .iter()
+            .any(|e| e.base.id == shown && !e.base.is_deleted);
+        if live {
+            self.selected.insert(shown);
         }
     }
 }

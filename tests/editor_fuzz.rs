@@ -20,7 +20,11 @@ fn random_sessions_keep_the_scene_valid() {
         .ok()
         .and_then(|n| n.parse().ok())
         .unwrap_or(SEEDS);
-    for seed in 0..seeds {
+    // `ROUGHDRAFT_FUZZ_ONLY=<seed>` replays one session.
+    let only = std::env::var("ROUGHDRAFT_FUZZ_ONLY")
+        .ok()
+        .and_then(|n| n.parse().ok());
+    for seed in only.map_or(0..seeds, |seed| seed..seed + 1) {
         session(seed);
     }
 }

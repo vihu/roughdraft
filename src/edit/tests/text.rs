@@ -130,6 +130,22 @@ fn arrow_label_sits_on_the_middle_point_not_the_box_centre() {
 }
 
 #[test]
+fn cutting_a_label_being_typed_leaves_nothing_selected() {
+    // Found by the editor fuzz: cut deleted the arrow, then the next key
+    // finished the edit and selected the deleted arrow again.
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
+    editor.double_click([50.0, 0.0]);
+    editor.set_text("hi");
+    assert!(editor.cut().is_some());
+    editor.finish_text();
+    assert!(editor.editing().is_none());
+    assert_eq!(editor.selection().count(), 0);
+    assert!(editor.scene().elements.iter().all(|e| e.base.is_deleted));
+}
+
+#[test]
 fn side_resize_wraps_free_text_and_later_edits_keep_the_width() {
     let mut editor = Editor::new(Scene::default());
     editor.command(Command::Tool(Tool::Text));

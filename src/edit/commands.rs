@@ -10,6 +10,9 @@ const DUPLICATE_OFFSET: f64 = 10.0;
 
 impl Editor {
     pub(super) fn delete(&mut self) {
+        // Text being typed is committed first, so its element is not left
+        // half-edited under a deleted container.
+        self.finish_text();
         if self.selected.is_empty() {
             return;
         }
