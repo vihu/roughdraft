@@ -4,23 +4,25 @@
 //! [`Sketch::view`] mapped to your message type, and pass its messages back
 //! to [`Sketch::update`].
 mod camera;
+mod keys;
 mod overlay;
 mod paint;
+mod picture;
 mod program;
 mod text;
 mod ui;
 
 use std::collections::HashMap;
 
-use iced::keyboard::{self, Key, key::Named};
 use iced::widget::canvas::{self, Canvas, Frame};
 use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
 use camera::{Camera, ZoomKey};
+use picture::{decode_image, encode_png};
 
 use crate::color::Rgba;
-use crate::edit::{self, Command, Editor, Order, Pointer, Tool};
+use crate::edit::{self, Command, Editor, Pointer};
 use crate::geometry::{self, Affine, Bounds};
 use crate::render::{self, Drawing, Item, Segment};
 use crate::scene::Scene;
@@ -285,43 +287,6 @@ impl Sketch {
         task.chain(self.sync_text_overlay())
     }
 
-    /// Supplies the picture for an image file the scene does not embed (for
-    /// hosts that store images elsewhere, such as Keeprs). `bytes` is an
-    /// encoded image (PNG, JPEG, GIF, WebP); undecodable bytes keep the
-    /// placeholder.
-    pub fn set_image(&mut self, file_id: &str, bytes: &[u8]) {
-        if let Some(handle) = decode_image(bytes) {
-            self.images.insert(file_id.to_owned(), handle);
-            self.clear_caches();
-        }
-    }
-
-    /// Inserts an encoded image (PNG, JPEG, GIF, WebP) at the middle of the
-    /// view, embedded in the scene as a data URL, like Excalidraw's image
-    /// tool.
-    ///
-    /// # Errors
-    ///
-    /// Returns a message when the bytes are not an image this crate reads.
-    pub fn insert_image(&mut self, bytes: &[u8]) -> Result<(), String> {
-        let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
-            .with_guessed_format()
-            .map_err(|e| e.to_string())?;
-        let format = reader.format().ok_or("not a recognised image format")?;
-        let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
-        let mime = format.to_mime_type();
-        let url = format!("data:{mime};base64,{}", crate::base64::encode(bytes));
-        let viewport = self.viewport.get();
-        let at = self.camera.scene_point(
-            iced::Rectangle::with_size(viewport),
-            iced::Point::new(viewport.width / 2.0, viewport.height / 2.0),
-        );
-        self.editor
-            .insert_image(url, mime, [f64::from(width), f64::from(height)], at);
-        self.refresh();
-        Ok(())
-    }
-
     /// Returns the current color scheme.
     pub fn appearance(&self) -> Appearance {
         self.appearance
@@ -470,128 +435,10 @@ impl Sketch {
             }
         }
     }
-
-    /// Draws a decoded image, or a grey placeholder while it is missing.
-    /// Images keep their colors in dark mode, like Excalidraw's.
-    fn draw_image(
-        &self,
-        frame: &mut Frame,
-        file_id: &str,
-        size: [f64; 2],
-        opacity: f32,
-        transform: Affine,
-    ) {
-        let Some(handle) = self.images.get(file_id) else {
-            let [w, h] = size;
-            let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]].map(|p| {
-                let [x, y] = transform.apply(p);
-                iced::Point::new(x as f32, y as f32)
-            });
-            let outline = canvas::Path::new(|path| {
-                path.move_to(corners[0]);
-                corners[1..].iter().for_each(|c| path.line_to(*c));
-                path.close();
-            });
-            let grey = Color {
-                a: 0.15 * opacity,
-                ..Color::BLACK
-            };
-            frame.fill(&outline, grey);
-            return;
-        };
-        // iced rotates the image about its centre, so place the unrotated box
-        // around the transformed centre.
-        let scale = transform.scale_factor();
-        let [cx, cy] = transform.apply([size[0] / 2.0, size[1] / 2.0]);
-        let (w, h) = (size[0] * scale, size[1] * scale);
-        let bounds = iced::Rectangle {
-            x: (cx - w / 2.0) as f32,
-            y: (cy - h / 2.0) as f32,
-            width: w as f32,
-            height: h as f32,
-        };
-        let image = canvas::Image::new(handle.clone())
-            .rotation(iced::Radians(transform.rotation() as f32))
-            .opacity(opacity);
-        frame.draw_image(bounds, image);
-    }
-}
-
-/// Decodes an image to RGBA up front: iced draws RGBA handles in the frame
-/// they appear, while encoded ones load on a worker and pop in later.
-// ponytail: decodes on the UI thread when a scene loads; move to a Task if
-// large photos stall opening a scene.
-fn decode_image(bytes: &[u8]) -> Option<iced::widget::image::Handle> {
-    let rgba = image::load_from_memory(bytes).ok()?.into_rgba8();
-    let (width, height) = rgba.dimensions();
-    Some(iced::widget::image::Handle::from_rgba(
-        width,
-        height,
-        rgba.into_raw(),
-    ))
-}
-
-/// Encodes RGBA pixels as PNG.
-fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Option<Vec<u8>> {
-    let image = image::RgbaImage::from_raw(width, height, rgba)?;
-    let mut png = Vec::new();
-    image
-        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-        .ok()?;
-    Some(png)
 }
 
 fn write_clipboard(json: Option<String>) -> Task<Message> {
     json.map_or_else(Task::none, |json| iced::clipboard::write(json).discard())
-}
-
-/// Maps Excalidraw's shortcuts to editor commands.
-fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
-    /// Arrow-key nudge in scene units: plain, and with Shift.
-    const NUDGE: (f64, f64) = (1.0, 5.0);
-
-    let (command, shift, alt) = (modifiers.command(), modifiers.shift(), modifiers.alt());
-    let step = if shift { NUDGE.1 } else { NUDGE.0 };
-    match key.as_ref() {
-        Key::Named(Named::Delete | Named::Backspace) if !command => Some(Command::Delete),
-        Key::Named(Named::Escape) => Some(Command::Escape),
-        Key::Named(Named::Enter) if command => Some(Command::EditLine),
-        Key::Named(Named::Enter) => Some(Command::Finish),
-        Key::Named(Named::ArrowLeft) => Some(Command::Nudge([-step, 0.0])),
-        Key::Named(Named::ArrowRight) => Some(Command::Nudge([step, 0.0])),
-        Key::Named(Named::ArrowUp) => Some(Command::Nudge([0.0, -step])),
-        Key::Named(Named::ArrowDown) => Some(Command::Nudge([0.0, step])),
-        Key::Character(c) => match (c.to_lowercase().as_str(), command) {
-            ("z", true) if shift => Some(Command::Redo),
-            ("z", true) => Some(Command::Undo),
-            ("y", true) => Some(Command::Redo),
-            ("d", true) => Some(Command::Duplicate),
-            ("a", true) => Some(Command::SelectAll),
-            ("g", true) if shift => Some(Command::Ungroup),
-            // `,` and `.` for layouts where Shift does not make `<` and `>`.
-            ("<" | ",", true) if shift => Some(Command::SmallerFont),
-            (">" | ".", true) if shift => Some(Command::LargerFont),
-            ("g", true) => Some(Command::Group),
-            // Shift turns the brackets into braces on most layouts.
-            ("[" | "{", true) if shift => Some(Command::Reorder(Order::ToBack)),
-            ("[", true) => Some(Command::Reorder(Order::Backward)),
-            ("]" | "}", true) if shift => Some(Command::Reorder(Order::ToFront)),
-            ("]", true) => Some(Command::Reorder(Order::Forward)),
-            (_, true) => None,
-            _ if alt => None,
-            ("v" | "1", _) => Some(Command::Tool(Tool::Selection)),
-            ("h", _) => Some(Command::Tool(Tool::Hand)),
-            ("r" | "2", _) => Some(Command::Tool(Tool::Rectangle)),
-            ("d" | "3", _) => Some(Command::Tool(Tool::Diamond)),
-            ("o" | "4", _) => Some(Command::Tool(Tool::Ellipse)),
-            ("a" | "5", _) => Some(Command::Tool(Tool::Arrow)),
-            ("l" | "6", _) => Some(Command::Tool(Tool::Line)),
-            ("t" | "8", _) => Some(Command::Tool(Tool::Text)),
-            ("q", _) => Some(Command::ToggleLock),
-            _ => None,
-        },
-        _ => None,
-    }
 }
 
 /// Top-left of everything drawn, minus [`PADDING`], so a scene opens at 100%
@@ -621,53 +468,5 @@ fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
         [min[0] - PADDING, min[1] - PADDING]
     } else {
         [0.0, 0.0]
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use iced::keyboard::{Key, Modifiers, key::Named};
-
-    use super::{Command, Tool, shortcut};
-
-    #[test]
-    fn shortcuts_follow_excalidraw() {
-        let ctrl = Modifiers::CTRL;
-        let key = |c: &str| Key::Character(c.into());
-        assert_eq!(shortcut(&key("z"), ctrl), Some(Command::Undo));
-        assert_eq!(
-            shortcut(&key("Z"), ctrl | Modifiers::SHIFT),
-            Some(Command::Redo)
-        );
-        assert_eq!(shortcut(&key("d"), ctrl), Some(Command::Duplicate));
-        assert_eq!(
-            shortcut(&key("d"), Modifiers::empty()),
-            Some(Command::Tool(Tool::Diamond))
-        );
-        assert_eq!(
-            shortcut(&key("5"), Modifiers::empty()),
-            Some(Command::Tool(Tool::Arrow))
-        );
-        assert_eq!(
-            shortcut(&key("h"), Modifiers::empty()),
-            Some(Command::Tool(Tool::Hand))
-        );
-        assert_eq!(
-            shortcut(&key("d"), Modifiers::ALT | Modifiers::SHIFT),
-            None,
-            "theme toggle stays with the app"
-        );
-        assert_eq!(
-            shortcut(&Key::Named(Named::ArrowLeft), Modifiers::SHIFT),
-            Some(Command::Nudge([-5.0, 0.0]))
-        );
-        assert_eq!(
-            shortcut(&key("<"), ctrl | Modifiers::SHIFT),
-            Some(Command::SmallerFont)
-        );
-        assert_eq!(
-            shortcut(&key("."), ctrl | Modifiers::SHIFT),
-            Some(Command::LargerFont)
-        );
     }
 }

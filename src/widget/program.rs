@@ -9,7 +9,8 @@ use iced::widget::canvas::{self, Event, Frame, Geometry};
 use iced::{Point, Rectangle, Renderer, Theme};
 
 use super::camera::zoom_key;
-use super::{Input, Message, Sketch, shortcut};
+use super::keys::shortcut;
+use super::{Input, Message, Sketch};
 use crate::edit::{self, Handle, Pointer, Tool};
 
 /// Transient input state of the canvas; pan and zoom live in [`Sketch`].

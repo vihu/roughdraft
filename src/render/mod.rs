@@ -9,12 +9,16 @@ use std::collections::{HashMap, HashSet};
 use rough_rs::{Drawable, Generator, Op, OpSetType, OpType, Options, ShapeType};
 
 use self::linear::{curve_bounds, curve_ops, linear, points_bounds};
+use self::shapes::{diamond, rectangle};
+use self::text::text_block;
 
 use crate::color::Rgba;
 use crate::geometry::{Affine, Point};
-use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle, Text, TextAlign};
+use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
 mod linear;
+mod shapes;
+mod text;
 
 /// One element, ready to draw.
 #[derive(Clone, Debug, PartialEq)]
@@ -342,122 +346,6 @@ pub(crate) fn corner_radius(x: f64, roundness: &Roundness) -> f64 {
             }
         }
         _ => 0.0,
-    }
-}
-
-fn rectangle(generator: &Generator, element: &Element) -> Drawable {
-    let (w, h) = (element.base.width, element.base.height);
-    match &element.base.roundness {
-        Some(roundness) => {
-            let r = corner_radius(w.min(h), roundness);
-            let (wr, hr) = (w - r, h - r);
-            let d = format!(
-                "M {r} 0 L {wr} 0 Q {w} 0, {w} {r} L {w} {hr} Q {w} {h}, {wr} {h} L {r} {h} Q 0 {h}, 0 {hr} L 0 {r} Q 0 0, {r} 0"
-            );
-            generator.path(&d, Some(rough_options(element, true)))
-        }
-        None => generator.rectangle(0.0, 0.0, w, h, Some(rough_options(element, false))),
-    }
-}
-
-fn diamond(generator: &Generator, element: &Element) -> Drawable {
-    let (w, h) = (element.base.width, element.base.height);
-    // `getDiamondPoints`; the +1 keeps rough.js away from zero-length sides.
-    let (top_x, top_y) = ((w / 2.0).floor() + 1.0, 0.0);
-    let (right_x, right_y) = (w, (h / 2.0).floor() + 1.0);
-    let (bottom_x, bottom_y) = (top_x, h);
-    let (left_x, left_y) = (0.0, right_y);
-
-    match &element.base.roundness {
-        Some(roundness) => {
-            let v = corner_radius((top_x - left_x).abs(), roundness);
-            let h = corner_radius((right_y - top_y).abs(), roundness);
-            let d = format!(
-                "M {} {} L {} {} C {right_x} {right_y}, {right_x} {right_y}, {} {} L {} {} C {bottom_x} {bottom_y}, {bottom_x} {bottom_y}, {} {} L {} {} C {left_x} {left_y}, {left_x} {left_y}, {} {} L {} {} C {top_x} {top_y}, {top_x} {top_y}, {} {}",
-                top_x + v,
-                top_y + h,
-                right_x - v,
-                right_y - h,
-                right_x - v,
-                right_y + h,
-                bottom_x + v,
-                bottom_y - h,
-                bottom_x - v,
-                bottom_y - h,
-                left_x + v,
-                left_y + h,
-                left_x + v,
-                left_y - h,
-                top_x - v,
-                top_y + h,
-                top_x + v,
-                top_y + h,
-            );
-            generator.path(&d, Some(rough_options(element, true)))
-        }
-        None => {
-            let points = [
-                [top_x, top_y],
-                [right_x, right_y],
-                [bottom_x, bottom_y],
-                [left_x, left_y],
-            ];
-            generator.polygon(&points, Some(rough_options(element, false)))
-        }
-    }
-}
-
-fn text_block(element: &Element, text: &Text, opacity: f32) -> TextBlock {
-    let line_height = text.font_size * text.line_height;
-    // `getVerticalOffset`: center the font's ascent + descent in the line.
-    let metrics = font_metrics(text.font_family);
-    let em = text.font_size / metrics.units_per_em;
-    let gap = (line_height - em * metrics.ascender + em * metrics.descender) / 2.0;
-    let (x, align) = match text.text_align {
-        TextAlign::Center => (element.base.width / 2.0, Align::Middle),
-        TextAlign::Right => (element.base.width, Align::End),
-        // ponytail: RTL lines anchor at the start, Excalidraw anchors them at the end
-        TextAlign::Left | TextAlign::Other(_) => (0.0, Align::Start),
-    };
-    TextBlock {
-        lines: text
-            .text
-            .replace("\r\n", "\n")
-            .replace('\r', "\n")
-            .split('\n')
-            .map(String::from)
-            .collect(),
-        x,
-        line_height,
-        baseline: em * metrics.ascender + gap,
-        align,
-        font_family: text.font_family,
-        font_size: text.font_size,
-        color: color(&element.base.stroke_color, opacity),
-    }
-}
-
-/// Vertical font metrics from `fonts/FontMetadata.ts` (hhea table values).
-struct FontMetrics {
-    units_per_em: f64,
-    ascender: f64,
-    descender: f64,
-}
-
-fn font_metrics(family: u32) -> FontMetrics {
-    let (units_per_em, ascender, descender) = match family {
-        6 => (1000.0, 1011.0, -353.0), // Nunito
-        7 => (1000.0, 923.0, -220.0),  // Lilita One
-        8 => (1000.0, 750.0, -250.0),  // Comic Shanns
-        2 => (2048.0, 1577.0, -471.0), // Helvetica
-        3 => (2048.0, 1900.0, -480.0), // Cascadia
-        9 => (2048.0, 1854.0, -434.0), // Liberation Sans
-        _ => (1000.0, 886.0, -374.0),  // Excalifont, Virgil, and the fallback
-    };
-    FontMetrics {
-        units_per_em,
-        ascender,
-        descender,
     }
 }
 
