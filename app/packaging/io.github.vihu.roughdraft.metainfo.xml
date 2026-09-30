@@ -35,6 +35,16 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-09-30">
+      <description>
+        <ul>
+          <li>Pen tool for freehand drawing, with two finer widths than Excalidraw's</li>
+          <li>A grid that drawing, moving and resizing snap to (Ctrl+')</li>
+          <li>Color picker: Excalidraw's palette in all its shades, and a hue ring for any other color</li>
+          <li>Dragging the opacity slider is one undo step</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-30"/>
   </releases>
 </component>
