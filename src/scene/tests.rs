@@ -110,3 +110,11 @@ fn missing_type_is_rejected() {
     let err = serde_json::from_str::<Element>(&input).unwrap_err();
     assert!(err.to_string().contains("missing field `type`"), "{err}");
 }
+
+#[test]
+fn numbers_parse_exactly_and_write_back_digit_for_digit() {
+    // The default serde_json parser reads this as ...542.
+    let input = r#"{"type":"excalidraw","elements":[],"n":22.604076400856545}"#;
+    let scene: Scene = serde_json::from_str(input).unwrap();
+    assert_eq!(serde_json::to_string(&scene).unwrap(), input);
+}

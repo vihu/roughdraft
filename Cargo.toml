@@ -14,8 +14,9 @@ image      = { version = "0.25", default-features = false, features = ["gif", "j
 # Exact pin: seed parity with rough.js 4.6.4 is guarded by tests/rough_parity.rs.
 rough-rs   = { version = "=0.1.0", default-features = false, features = ["svg_path"] }
 serde      = { version = "1", features = ["derive"] }
-# preserve_order keeps scene key order on save.
-serde_json = { version = "1", features = ["preserve_order"] }
+# preserve_order keeps scene key order on save; float_roundtrip parses
+# numbers exactly, so they are written back digit for digit.
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 
 [dev-dependencies]
 # Headless rendering for the playground's --snapshot; same rev as iced.
