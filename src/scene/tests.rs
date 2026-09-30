@@ -132,3 +132,18 @@ fn lines_with_fewer_than_two_points_restore_to_their_box() {
     };
     assert_eq!(line.points, [[0.0, 0.0], [100.0, 50.0]]);
 }
+
+#[test]
+fn old_arrows_without_arrowhead_keys_point_at_their_end() {
+    let json = format!(
+        r#"{{"type":"excalidraw","elements":[{{"id":"a","type":"arrow",{BASE},"points":[[0,0],[100,50]]}}]}}"#
+    );
+    let scene: Scene = serde_json::from_str(&json).unwrap();
+    let Kind::Arrow(line) = &scene.elements[0].kind else {
+        panic!("arrow")
+    };
+    assert_eq!(
+        (&line.start_arrowhead, &line.end_arrowhead),
+        (&None, &Some(Arrowhead::Arrow))
+    );
+}

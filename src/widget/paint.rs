@@ -22,6 +22,8 @@ pub(super) fn draw_item(
     let scale = transform.scale_factor();
     match item {
         Item::Stroke { color, .. } | Item::Fill { color, .. } if color.a == 0.0 => {}
+        // Non-finite geometry (bad data) would panic in the tessellator.
+        Item::Stroke { path, .. } | Item::Fill { path, .. } if !finite(path) => {}
         Item::Stroke {
             path,
             color,
@@ -149,5 +151,13 @@ pub(super) fn to_path(segments: &[Segment], transform: Affine) -> Path {
                 }
             }
         }
+    })
+}
+
+/// Whether every point of a path is a finite number.
+fn finite(path: &[Segment]) -> bool {
+    path.iter().all(|segment| match *segment {
+        Segment::MoveTo(p) | Segment::LineTo(p) => p.iter().all(|v| v.is_finite()),
+        Segment::CubicTo(a, b, c) => [a, b, c].iter().flatten().all(|v| v.is_finite()),
     })
 }

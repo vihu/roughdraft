@@ -65,3 +65,23 @@ fn arrow_gets_shaft_and_two_head_strokes() {
     // Shaft: one stroke set; each head line: one stroke set.
     assert_eq!(strokes, 3);
 }
+
+#[test]
+fn a_zero_length_arrow_draws_no_head_and_no_nan() {
+    let arrow = format!(
+        r#"{{"id":"z","type":"arrow",{BASE},"points":[[0,0],[0,0]],"startArrowhead":null,"endArrowhead":"arrow"}}"#
+    );
+    let drawings = render(&scene(&[arrow]));
+    let finite = |p: &[f64; 2]| p.iter().all(|v| v.is_finite());
+    for item in drawings.iter().flat_map(|d| &d.items) {
+        if let Item::Stroke { path, .. } | Item::Fill { path, .. } = item {
+            for segment in path {
+                let ok = match segment {
+                    super::Segment::MoveTo(p) | super::Segment::LineTo(p) => finite(p),
+                    super::Segment::CubicTo(a, b, c) => finite(a) && finite(b) && finite(c),
+                };
+                assert!(ok, "{segment:?}");
+            }
+        }
+    }
+}

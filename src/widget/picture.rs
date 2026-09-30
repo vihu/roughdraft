@@ -26,6 +26,7 @@ impl Sketch {
         if let Some(handle) = decode_image(bytes) {
             // Cut or mirrored views of the old picture are made again.
             self.images.retain(|picture, _| picture.file != file_id);
+            self.undecodable.remove(file_id);
             self.images
                 .insert(Picture::of(file_id, None, [false, false]), handle);
             self.refresh();

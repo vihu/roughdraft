@@ -125,13 +125,13 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
     }
     svg.push_str("</defs>");
     if options.background {
-        let background = Rgba::parse(scene.background_color()).unwrap_or(Rgba::WHITE);
+        // The colour as stored, like Excalidraw (`transparent` stays so).
         let _ = write!(
             svg,
             r#"<rect x="0" y="0" width="{}" height="{}" fill="{}"/>"#,
             num(width),
             num(height),
-            hex(background)
+            escape(scene.background_color())
         );
     }
     let background = scene.background_color();
@@ -361,19 +361,25 @@ fn hex(color: Rgba) -> String {
 /// `getFontFamilyString`: the family name plus Excalidraw's fallbacks.
 fn font_family(id: u32) -> &'static str {
     match id {
-        1 => "Virgil, Xiaolai, Segoe UI Emoji",
-        2 => "Helvetica, Xiaolai, Segoe UI Emoji",
-        3 => "Cascadia, Xiaolai, Segoe UI Emoji",
-        6 => "Nunito, Xiaolai, Segoe UI Emoji",
-        7 => "Lilita One, Xiaolai, Segoe UI Emoji",
-        8 => "Comic Shanns, Xiaolai, Segoe UI Emoji",
-        9 => "Liberation Sans, Xiaolai, Segoe UI Emoji",
+        // Only Excalifont falls back to Xiaolai (`getFontFamilyFallbacks`).
+        1 => "Virgil, Segoe UI Emoji",
+        2 => "Helvetica, Segoe UI Emoji",
+        3 => "Cascadia, Segoe UI Emoji",
+        6 => "Nunito, Segoe UI Emoji",
+        7 => "Lilita One, Segoe UI Emoji",
+        8 => "Comic Shanns, Segoe UI Emoji",
+        9 => "Liberation Sans, Segoe UI Emoji",
         _ => "Excalifont, Xiaolai, Segoe UI Emoji",
     }
 }
 
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
+    // Control characters other than tab and newlines are not allowed in
+    // XML at all.
+    text.chars()
+        .filter(|c| *c >= ' ' || matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
@@ -383,6 +389,16 @@ fn escape(text: &str) -> String {
 mod tests {
     use super::{fixed, path_data};
     use crate::render::Segment;
+
+    #[test]
+    fn writes_the_background_as_stored_and_drops_xml_control_characters() {
+        let json = r##"{"type":"excalidraw","elements":[{"id":"t","type":"text","x":0,"y":0,"width":20,"height":25,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"seed":1,"isDeleted":false,"text":"a\u000bb","fontSize":20,"fontFamily":6,"textAlign":"left","verticalAlign":"top","lineHeight":1.25}],"appState":{"viewBackgroundColor":"transparent"}}"##;
+        let scene: crate::scene::Scene = serde_json::from_str(json).unwrap();
+        let svg = super::export(&scene, &super::SvgOptions::default());
+        assert!(svg.contains(r#"fill="transparent"/>"#), "{svg}");
+        assert!(svg.contains(">ab</text>") && !svg.contains('\u{b}'));
+        assert!(svg.contains(r#"font-family="Nunito, Segoe UI Emoji""#));
+    }
 
     #[test]
     fn embeds_each_bundled_font_the_text_uses() {

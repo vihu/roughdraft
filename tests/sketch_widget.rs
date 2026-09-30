@@ -225,3 +225,60 @@ fn footer_zooms_and_undoes() {
     });
     assert_eq!(sketch.scene().elements[0].base.x, moved);
 }
+
+#[test]
+fn keys_after_a_press_outside_the_canvas_belong_to_that_widget() {
+    // A host puts the sketch under its own widgets (a title field, say).
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    let host = |sketch: &mut Sketch, presses: &[Point]| {
+        let messages: Vec<_> = {
+            let view = iced::widget::column![iced::widget::space().height(100), sketch.canvas()];
+            let mut ui =
+                iced_test::Simulator::with_size(iced::Settings::default(), (800.0, 700.0), view);
+            for &at in presses {
+                ui.point_at(at);
+                ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+                ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+            }
+            let _ = ui.tap_key(iced::keyboard::key::Named::Backspace);
+            ui.into_messages().collect()
+        };
+        for message in messages {
+            let _ = sketch.update(message);
+        }
+    };
+    // The box is at screen (480, 445), under the 100 px space. Selected,
+    // then a press above the canvas: Backspace is the other widget's.
+    host(
+        &mut sketch,
+        &[Point::new(480.0, 445.0), Point::new(480.0, 50.0)],
+    );
+    assert!(sketch.editor().is_selected("box"));
+    assert!(!sketch.scene().elements[0].base.is_deleted);
+    // With the canvas pressed last, it deletes.
+    host(&mut sketch, &[Point::new(480.0, 445.0)]);
+    assert!(sketch.scene().elements[0].base.is_deleted);
+}
+
+#[test]
+fn the_wheel_scrolls_like_iced_scrollables() {
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    // Wheel up: the content moves down 50, so the box's old top edge on
+    // screen is now above it.
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(480.0, 345.0));
+        ui.simulate([Event::Mouse(mouse::Event::WheelScrolled {
+            delta: mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 },
+        })]);
+    });
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(480.0, 305.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    });
+    assert!(!sketch.editor().is_selected("box"));
+}

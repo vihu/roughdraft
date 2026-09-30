@@ -190,6 +190,10 @@ fn arrowhead_points(
     let [x2, y2] = if end == End::Start { p0 } else { p3 };
     let (x1, y1) = (equation(0.3, 0), equation(0.3, 1));
     let distance = (x2 - x1).hypot(y2 - y1);
+    // A zero-length arrow has no direction to point a head along.
+    if distance == 0.0 {
+        return None;
+    }
     let (nx, ny) = ((x2 - x1) / distance, (y2 - y1) / distance);
 
     let points = &line.points;

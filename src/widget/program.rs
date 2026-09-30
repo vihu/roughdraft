@@ -21,6 +21,10 @@ pub struct State {
     space: bool,
     modifiers: keyboard::Modifiers,
     last_click: Option<(Instant, Point)>,
+    /// A press landed outside the canvas (another widget, the tool bar or
+    /// the style panel): keys belong to that widget until the next press
+    /// on the canvas.
+    unfocused: bool,
 }
 
 /// Pixels per scrolled line.
@@ -57,8 +61,11 @@ impl canvas::Program<Message> for Sketch {
                 state.modifiers = *modifiers;
                 None
             }
-            // The text overlay owns the keyboard while typing.
-            Event::Keyboard(_) if typing => None,
+            // The text overlay owns the keyboard while typing, and another
+            // widget does after a press outside the canvas.
+            // A colour being typed in the style panel keeps the arrow keys
+            // (its text field does not take them).
+            Event::Keyboard(_) if typing || state.unfocused || self.color_draft.is_some() => None,
             Event::Keyboard(keyboard::Event::KeyPressed {
                 key: Key::Named(Named::Space),
                 ..
@@ -109,7 +116,11 @@ impl canvas::Program<Message> for Sketch {
                     .and_then(publish)
             }
             Event::Mouse(mouse::Event::ButtonPressed(button)) => {
-                let position = cursor.position_over(bounds)?;
+                let Some(position) = cursor.position_over(bounds) else {
+                    state.unfocused = true;
+                    return None;
+                };
+                state.unfocused = false;
                 let pans = *button == mouse::Button::Middle
                     || (*button == mouse::Button::Left
                         && (state.space || self.editor.tool() == Tool::Hand));
@@ -178,12 +189,15 @@ impl canvas::Program<Message> for Sketch {
                         cursor,
                     });
                 }
-                let (dx, dy) = if state.modifiers.shift() {
+                // Shift scrolls sideways; macOS swaps the axes itself.
+                let (dx, dy) = if state.modifiers.shift() && !cfg!(target_os = "macos") {
                     (dy, dx)
                 } else {
                     (dx, dy)
                 };
-                publish(Input::Pan([-dx, -dy]))
+                // A positive delta (wheel up) moves the content down, like
+                // iced's scrollable and Excalidraw.
+                publish(Input::Pan([dx, dy]))
             }
             _ => None,
         }

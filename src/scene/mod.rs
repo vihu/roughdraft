@@ -367,8 +367,9 @@ impl Element {
             &self.kind,
             self.json.get("originalText").and_then(Value::as_str),
         ) {
-            (Kind::Text(_), Some(original)) => original,
-            (Kind::Text(text), None) => &text.text,
+            // `originalText || text`: an empty original falls back too.
+            (Kind::Text(_), Some(original)) if !original.is_empty() => original,
+            (Kind::Text(text), _) => &text.text,
             _ => "",
         }
     }

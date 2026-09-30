@@ -57,6 +57,17 @@ pub(super) fn typed_view(json: &Map<String, Value>) -> Value {
             .collect();
         typed.insert("boundElements".into(), Value::Array(bound));
     }
+    // Arrows saved before arrowheads existed point at their end.
+    if kind == "arrow" {
+        for (key, value) in [
+            ("startArrowhead", Value::Null),
+            ("endArrowhead", json!("arrow")),
+        ] {
+            if typed.get(key).is_none() {
+                typed.insert(key.into(), value);
+            }
+        }
+    }
     match kind {
         "text" => restore_text(&mut typed),
         "line" | "arrow"

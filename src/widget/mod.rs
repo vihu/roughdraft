@@ -63,6 +63,9 @@ pub struct Sketch {
     /// Decoded pictures: each file whole, and cut or mirrored as elements
     /// show it.
     images: HashMap<Picture, iced::widget::image::Handle>,
+    /// Files that did not decode (an SVG, a broken data URL), so they are
+    /// not decoded again on every update; `set_image` can still supply one.
+    undecodable: std::collections::HashSet<String>,
     /// Canvas size at the last draw, for placing inserted images.
     viewport: std::cell::Cell<iced::Size>,
     /// A colour being typed in the style panel, until the next click.
@@ -153,6 +156,7 @@ impl Sketch {
             content: text_editor::Content::new(),
             editing: None,
             images: HashMap::new(),
+            undecodable: std::collections::HashSet::new(),
             viewport: std::cell::Cell::new(iced::Size::new(800.0, 600.0)),
             color_draft: None,
         };
@@ -397,14 +401,22 @@ impl Sketch {
                 continue;
             };
             let whole = Picture::of(id, None, [false, false]);
-            if !self.images.contains_key(&whole) {
+            if !self.images.contains_key(&whole) && !self.undecodable.contains(id) {
                 let handle = scene
                     .file_data_url(id)
                     .and_then(crate::base64::decode_data_url)
                     .and_then(|(_, bytes)| decode_image(&bytes));
-                if let Some(handle) = handle {
-                    self.images.insert(whole.clone(), handle);
-                    static_changed = true;
+                match handle {
+                    Some(handle) => {
+                        self.images.insert(whole.clone(), handle);
+                        static_changed = true;
+                    }
+                    // A file the scene does not hold yet may come later
+                    // (`set_image`, a paste that brings it).
+                    None if scene.file_data_url(id).is_some() => {
+                        self.undecodable.insert(id.to_owned());
+                    }
+                    None => {}
                 }
             }
             // A cut or mirrored view comes from the whole picture's pixels.
