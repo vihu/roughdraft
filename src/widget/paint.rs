@@ -54,6 +54,8 @@ pub(super) fn draw_item(
             frame.fill(&to_path(path, transform), Fill { style, rule });
         }
         Item::Text(block) => draw_text(frame, block, transform, paint),
+        // Drawn by `Sketch::draw_ids`, which holds the decoded images.
+        Item::Image { .. } => {}
     }
 }
 

@@ -254,7 +254,44 @@ impl Scene {
                     .insert("lastCommittedPoint".into(), Value::Null);
             }
         }
+        // Files only travel with a live image that uses them.
+        let used: std::collections::HashSet<String> = scene
+            .elements
+            .iter()
+            .filter_map(|e| e.file_id().map(str::to_owned))
+            .collect();
+        if let Some(Value::Object(files)) = scene.json.get_mut("files") {
+            files.retain(|id, _| used.contains(id));
+        }
         scene
+    }
+
+    /// Returns the data URL stored for an image file, if the scene has one.
+    pub fn file_data_url(&self, id: &str) -> Option<&str> {
+        self.json.get("files")?.get(id)?.get("dataURL")?.as_str()
+    }
+
+    /// Adds an image file (`files[id]`), as Excalidraw stores it.
+    pub fn insert_file(&mut self, id: &str, mime: &str, data_url: String) {
+        let now = now_ms();
+        let files = self
+            .json
+            .entry("files")
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !files.is_object() {
+            *files = Value::Object(Map::new());
+        }
+        let file = serde_json::json!({
+            "mimeType": mime,
+            "id": id,
+            "dataURL": data_url,
+            "created": now,
+            "lastRetrieved": now,
+        });
+        files
+            .as_object_mut()
+            .expect("made an object above")
+            .insert(id.into(), file);
     }
 
     /// Returns `appState.viewBackgroundColor`, white when unset.
@@ -293,6 +330,14 @@ impl Element {
             (Kind::Text(_), Some(original)) => original,
             (Kind::Text(text), None) => &text.text,
             _ => "",
+        }
+    }
+
+    /// Returns an image element's file id.
+    pub fn file_id(&self) -> Option<&str> {
+        match &self.kind {
+            Kind::Other(kind) if kind == "image" => self.json.get("fileId")?.as_str(),
+            _ => None,
         }
     }
 

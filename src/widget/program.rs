@@ -176,6 +176,7 @@ impl canvas::Program<Message> for Sketch {
     ) -> Vec<Geometry> {
         let view = self.camera.view();
         let size = bounds.size();
+        self.viewport.set(size);
         let active: HashSet<&str> = self.active.iter().map(String::as_str).collect();
         let first = self
             .order

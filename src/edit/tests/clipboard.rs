@@ -85,3 +85,42 @@ fn plain_text_pastes_as_a_centred_text_element() {
     assert!(editor.is_selected(&text.base.id));
     assert!(editor.editing().is_none());
 }
+
+#[test]
+fn inserted_image_fits_600_renders_exports_and_prunes_on_save() {
+    let mut editor = editor();
+    let url = "data:image/png;base64,TWFu".to_owned();
+    let id = editor.insert_image(url.clone(), "image/png", [1200.0, 300.0], [0.0, 0.0]);
+    let image = editor.scene().elements.last().unwrap();
+    assert_eq!(
+        (
+            image.base.x,
+            image.base.y,
+            image.base.width,
+            image.base.height
+        ),
+        (-300.0, -75.0, 600.0, 150.0)
+    );
+    assert!(editor.is_selected(&id));
+    let file_id = image.file_id().unwrap().to_owned();
+    assert_eq!(editor.scene().file_data_url(&file_id), Some(url.as_str()));
+    let drawing = crate::render::render_element(image, "#ffffff").unwrap();
+    assert!(
+        matches!(&drawing.items[..], [crate::render::Item::Image { size, .. }] if *size == [600.0, 150.0])
+    );
+    let svg = crate::svg::export(editor.scene(), &crate::svg::SvgOptions::default());
+    assert!(
+        svg.contains(r#"<image href="data:image/png;base64,TWFu""#),
+        "{svg}"
+    );
+
+    editor.command(Command::Delete);
+    let saved = serde_json::to_value(editor.scene().saved()).unwrap();
+    assert_eq!(
+        saved["files"],
+        serde_json::json!({}),
+        "file of a deleted image is dropped"
+    );
+    editor.command(Command::Undo);
+    assert!(editor.scene().saved().file_data_url(&file_id).is_some());
+}

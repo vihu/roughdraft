@@ -84,6 +84,16 @@ impl Affine {
         (self.a * self.d - self.b * self.c).abs().sqrt()
     }
 
+    /// Builds a transform from SVG's `matrix(a b c d e f)` values.
+    pub const fn from_coefficients([a, b, c, d, e, f]: [f64; 6]) -> Self {
+        Self { a, b, c, d, e, f }
+    }
+
+    /// Returns `[a, b, c, d, e, f]`, as in SVG's `matrix(a b c d e f)`.
+    pub fn coefficients(&self) -> [f64; 6] {
+        [self.a, self.b, self.c, self.d, self.e, self.f]
+    }
+
     /// Returns the rotation in radians.
     pub fn rotation(&self) -> f64 {
         self.b.atan2(self.a)

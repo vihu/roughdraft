@@ -82,6 +82,10 @@ fn hits(element: &Element, labelled: bool, at: Point, threshold: f64) -> bool {
             polygon_hit(&line.points, false, p, threshold, from_inside && loop_)
         }
         Kind::Arrow(line) => polygon_hit(&line.points, false, p, threshold, false),
+        Kind::Other(kind) if kind == "image" => {
+            let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]];
+            polygon_hit(&corners, true, p, threshold, true)
+        }
         Kind::Other(_) => false,
     }
 }

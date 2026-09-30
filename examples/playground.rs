@@ -16,7 +16,8 @@
 //! pans, Ctrl+scroll zooms, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
 //! arrow keys nudge, Ctrl+[ / Ctrl+] (with Shift: to back / front) reorder,
 //! Ctrl+G / Ctrl+Shift+G group. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
-//! format, so shapes paste between this and excalidraw.com.
+//! format, so shapes paste between this and excalidraw.com; a copied image
+//! pastes as an image. 9 inserts an image file.
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.
@@ -105,6 +106,8 @@ enum Message {
     Opened(Option<PathBuf>),
     Save { choose: bool },
     Saved(Result<PathBuf, String>),
+    PickImage,
+    ImagePicked(Option<Vec<u8>>),
 }
 
 impl Playground {
@@ -158,6 +161,13 @@ impl Playground {
                 self.path = Some(path);
             }
             Message::Saved(Err(error)) => self.error = Some(error),
+            Message::PickImage => return Task::perform(pick_image(), Message::ImagePicked),
+            Message::ImagePicked(Some(bytes)) => {
+                if let Err(error) = self.sketch.insert_image(&bytes) {
+                    eprintln!("insert image: {error}");
+                }
+            }
+            Message::ImagePicked(None) => {}
         }
         Task::none()
     }
@@ -188,6 +198,8 @@ impl Playground {
                 key::Code::KeyS if modifiers.command() => Some(Message::Save {
                     choose: modifiers.shift(),
                 }),
+                // Excalidraw's image tool key; text editing captures it first.
+                key::Code::Digit9 if modifiers.is_empty() => Some(Message::PickImage),
                 _ => None,
             }
         })
@@ -220,6 +232,14 @@ async fn pick_file() -> Option<PathBuf> {
     Some(file.path().to_owned())
 }
 
+async fn pick_image() -> Option<Vec<u8>> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("Image", &["png", "jpg", "jpeg", "gif", "webp"])
+        .pick_file()
+        .await?;
+    Some(file.read().await)
+}
+
 async fn save_file(path: Option<PathBuf>, json: String) -> Result<PathBuf, String> {
     let path = match path {
         Some(path) => path,
@@ -246,10 +266,18 @@ fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {
         .snapshot(&iced::Theme::Light)
         .map_err(|e| e.to_string())?;
     // `matches_image` writes the PNG when none exists yet.
-    let stem = png.trim_end_matches(".png");
-    for old in std::fs::read_dir(".").into_iter().flatten().flatten() {
+    let stem = std::path::Path::new(png.trim_end_matches(".png"));
+    let dir = stem
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let prefix = format!(
+        "{}-",
+        stem.file_name().unwrap_or_default().to_string_lossy()
+    );
+    for old in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let name = old.file_name().to_string_lossy().into_owned();
-        if name.starts_with(&format!("{stem}-")) && name.ends_with(".png") {
+        if name.starts_with(&prefix) && name.ends_with(".png") {
             std::fs::remove_file(old.path()).map_err(|e| e.to_string())?;
         }
     }

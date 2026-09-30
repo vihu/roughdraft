@@ -22,12 +22,7 @@ use crate::geometry::{self, Affine};
 use crate::render::{self, Drawing, Item, Segment};
 use crate::scene::Scene;
 
-/// Excalifont, Excalidraw's default hand-drawn font (OFL-1.1).
-///
-/// Register it with `iced::application(..).fonts([EXCALIFONT])` so text renders
-/// in it.
-pub const EXCALIFONT: &[u8] =
-    include_bytes!("../../assets/fonts/Excalifont/Excalifont-Regular.ttf");
+pub use crate::fonts::EXCALIFONT;
 
 /// Canvas color scheme, like Excalidraw's theme toggle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -57,6 +52,10 @@ pub struct Sketch {
     /// What the text overlay edits, and the id of the element it belongs to.
     content: text_editor::Content,
     editing: Option<String>,
+    /// Decoded images by file id.
+    images: HashMap<String, iced::widget::image::Handle>,
+    /// Canvas size at the last draw, for placing inserted images.
+    viewport: std::cell::Cell<iced::Size>,
 }
 
 /// Pan and zoom: the scene point at the canvas' top-left, and the scale.
@@ -93,6 +92,8 @@ enum Input {
     /// Paste centred on a scene point.
     Paste(geometry::Point),
     Pasted(geometry::Point, Option<String>),
+    /// A clipboard image: width, height, RGBA pixels.
+    PastedImage(geometry::Point, u32, u32, std::sync::Arc<Vec<u8>>),
 }
 
 /// Excalidraw's zoom limits.
@@ -128,6 +129,8 @@ impl Sketch {
             },
             content: text_editor::Content::new(),
             editing: None,
+            images: HashMap::new(),
+            viewport: std::cell::Cell::new(iced::Size::new(800.0, 600.0)),
         };
         sketch.refresh();
         sketch.camera.origin = content_origin(sketch.drawings());
@@ -195,8 +198,30 @@ impl Sketch {
             Input::Copy => write_clipboard(self.editor.copy()),
             Input::Cut => write_clipboard(self.editor.cut()),
             Input::Paste(at) => {
-                return iced::clipboard::read_text()
-                    .map(move |text| Message(Input::Pasted(at, text.ok().map(|t| (*t).clone()))));
+                // An image on the clipboard wins over text, like Excalidraw.
+                return iced::clipboard::read_image().then(move |image| match image {
+                    Ok(image) => Task::done(Message(Input::PastedImage(
+                        at,
+                        image.size.width,
+                        image.size.height,
+                        std::sync::Arc::new(image.rgba.to_vec()),
+                    ))),
+                    Err(_) => iced::clipboard::read_text().map(move |text| {
+                        Message(Input::Pasted(at, text.ok().map(|t| (*t).clone())))
+                    }),
+                });
+            }
+            Input::PastedImage(at, width, height, rgba) => {
+                if let Some(png) = encode_png(width, height, rgba.to_vec()) {
+                    let url = format!("data:image/png;base64,{}", crate::base64::encode(&png));
+                    self.editor.insert_image(
+                        url,
+                        "image/png",
+                        [f64::from(width), f64::from(height)],
+                        at,
+                    );
+                }
+                Task::none()
             }
             Input::Pasted(at, text) => {
                 if let Some(text) = text {
@@ -207,6 +232,43 @@ impl Sketch {
         };
         self.refresh();
         task.chain(self.sync_text_overlay())
+    }
+
+    /// Supplies the picture for an image file the scene does not embed (for
+    /// hosts that store images elsewhere, such as Keeprs). `bytes` is an
+    /// encoded image (PNG, JPEG, GIF, WebP); undecodable bytes keep the
+    /// placeholder.
+    pub fn set_image(&mut self, file_id: &str, bytes: &[u8]) {
+        if let Some(handle) = decode_image(bytes) {
+            self.images.insert(file_id.to_owned(), handle);
+            self.clear_caches();
+        }
+    }
+
+    /// Inserts an encoded image (PNG, JPEG, GIF, WebP) at the middle of the
+    /// view, embedded in the scene as a data URL, like Excalidraw's image
+    /// tool.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message when the bytes are not an image this crate reads.
+    pub fn insert_image(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()
+            .map_err(|e| e.to_string())?;
+        let format = reader.format().ok_or("not a recognised image format")?;
+        let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
+        let mime = format.to_mime_type();
+        let url = format!("data:{mime};base64,{}", crate::base64::encode(bytes));
+        let viewport = self.viewport.get();
+        let at = self.camera.scene_point(
+            iced::Rectangle::with_size(viewport),
+            iced::Point::new(viewport.width / 2.0, viewport.height / 2.0),
+        );
+        self.editor
+            .insert_image(url, mime, [f64::from(width), f64::from(height)], at);
+        self.refresh();
+        Ok(())
     }
 
     /// Returns the current color scheme.
@@ -273,6 +335,22 @@ impl Sketch {
             }
             self.drawings.insert(id.clone(), (revision, drawing));
         }
+        for element in scene.elements.iter().filter(|e| !e.base.is_deleted) {
+            let Some(id) = element
+                .file_id()
+                .filter(|id| !self.images.contains_key(*id))
+            else {
+                continue;
+            };
+            let handle = scene
+                .file_data_url(id)
+                .and_then(crate::base64::decode_data_url)
+                .and_then(|(_, bytes)| decode_image(&bytes));
+            if let Some(handle) = handle {
+                self.images.insert(id.to_owned(), handle);
+                static_changed = true;
+            }
+        }
         static_changed |= !previous.is_empty() || order != self.order;
         self.order = order;
         self.active = active;
@@ -306,9 +384,63 @@ impl Sketch {
         for drawing in shown.filter_map(|id| self.drawings[id].1.as_ref()) {
             let transform = drawing.transform.then(view);
             for item in &drawing.items {
-                paint::draw_item(frame, item, transform, &|c| self.paint(c));
+                match item {
+                    Item::Image {
+                        file_id,
+                        size,
+                        opacity,
+                    } => {
+                        self.draw_image(frame, file_id, *size, *opacity, transform);
+                    }
+                    _ => paint::draw_item(frame, item, transform, &|c| self.paint(c)),
+                }
             }
         }
+    }
+
+    /// Draws a decoded image, or a grey placeholder while it is missing.
+    /// Images keep their colors in dark mode, like Excalidraw's.
+    fn draw_image(
+        &self,
+        frame: &mut Frame,
+        file_id: &str,
+        size: [f64; 2],
+        opacity: f32,
+        transform: Affine,
+    ) {
+        let Some(handle) = self.images.get(file_id) else {
+            let [w, h] = size;
+            let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]].map(|p| {
+                let [x, y] = transform.apply(p);
+                iced::Point::new(x as f32, y as f32)
+            });
+            let outline = canvas::Path::new(|path| {
+                path.move_to(corners[0]);
+                corners[1..].iter().for_each(|c| path.line_to(*c));
+                path.close();
+            });
+            let grey = Color {
+                a: 0.15 * opacity,
+                ..Color::BLACK
+            };
+            frame.fill(&outline, grey);
+            return;
+        };
+        // iced rotates the image about its centre, so place the unrotated box
+        // around the transformed centre.
+        let scale = transform.scale_factor();
+        let [cx, cy] = transform.apply([size[0] / 2.0, size[1] / 2.0]);
+        let (w, h) = (size[0] * scale, size[1] * scale);
+        let bounds = iced::Rectangle {
+            x: (cx - w / 2.0) as f32,
+            y: (cy - h / 2.0) as f32,
+            width: w as f32,
+            height: h as f32,
+        };
+        let image = canvas::Image::new(handle.clone())
+            .rotation(iced::Radians(transform.rotation() as f32))
+            .opacity(opacity);
+        frame.draw_image(bounds, image);
     }
 }
 
@@ -333,6 +465,30 @@ impl Camera {
 fn zoom_at(origin: [f64; 2], from: f64, to: f64, cursor: [f64; 2]) -> [f64; 2] {
     let anchor = [origin[0] + cursor[0] / from, origin[1] + cursor[1] / from];
     [anchor[0] - cursor[0] / to, anchor[1] - cursor[1] / to]
+}
+
+/// Decodes an image to RGBA up front: iced draws RGBA handles in the frame
+/// they appear, while encoded ones load on a worker and pop in later.
+// ponytail: decodes on the UI thread when a scene loads; move to a Task if
+// large photos stall opening a scene.
+fn decode_image(bytes: &[u8]) -> Option<iced::widget::image::Handle> {
+    let rgba = image::load_from_memory(bytes).ok()?.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    Some(iced::widget::image::Handle::from_rgba(
+        width,
+        height,
+        rgba.into_raw(),
+    ))
+}
+
+/// Encodes RGBA pixels as PNG.
+fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Option<Vec<u8>> {
+    let image = image::RgbaImage::from_raw(width, height, rgba)?;
+    let mut png = Vec::new();
+    image
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .ok()?;
+    Some(png)
 }
 
 fn write_clipboard(json: Option<String>) -> Task<Message> {
@@ -399,6 +555,7 @@ fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
                     })
                     .collect(),
                 Item::Text(_) => vec![[0.0, 0.0]],
+                Item::Image { size, .. } => vec![[0.0, 0.0], *size],
             };
             for p in points {
                 let [x, y] = drawing.transform.apply(p);

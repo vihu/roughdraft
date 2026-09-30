@@ -50,6 +50,15 @@ pub enum Item {
     },
     /// Lines of text.
     Text(TextBlock),
+    /// A picture filling the element's box.
+    Image {
+        /// Key into the scene's `files`.
+        file_id: String,
+        /// Box size.
+        size: [f64; 2],
+        /// Element opacity, from 0 to 1.
+        opacity: f32,
+    },
 }
 
 /// One path command.
@@ -106,7 +115,7 @@ pub enum Align {
 
 /// Returns drawings for every visible element, in Excalidraw's draw order.
 ///
-/// Types this version does not draw yet (image, freedraw, frame, embeds) are
+/// Types this version does not draw yet (freedraw, frame, embeds) are
 /// skipped.
 pub fn render(scene: &Scene) -> Vec<Drawing> {
     let background = scene.background_color();
@@ -142,7 +151,8 @@ pub fn draw_order(scene: &Scene) -> Vec<&Element> {
 }
 
 /// Draws one element; `background` is the canvas color, used by outlined
-/// arrowheads. Returns `None` for types this version does not draw.
+/// arrowheads. Returns `None` for types this version does not draw
+/// (freedraw, frames, embeds, images without a file).
 pub fn render_element(element: &Element, background: &str) -> Option<Drawing> {
     draw(element, background)
 }
@@ -200,7 +210,15 @@ fn draw(element: &Element, background: &str) -> Option<Drawing> {
             items.push(Item::Text(text_block(element, text, opacity)));
             box_center
         }
-        Kind::Other(_) => return None,
+        Kind::Other(_) => {
+            // ponytail: `crop` and flips (`scale`) ignored; the picture fills the box
+            items.push(Item::Image {
+                file_id: element.file_id()?.to_owned(),
+                size: [width, height],
+                opacity,
+            });
+            box_center
+        }
     };
 
     let transform =

@@ -51,6 +51,31 @@ fn matches_excalidraw_svg_export() {
     );
 }
 
+/// Our SVG export must carry the same marks as Excalidraw's export.
+#[test]
+fn our_export_matches_excalidraw_export() {
+    let mut failures = Vec::new();
+    for fixture in common::fixtures() {
+        let Some(reference) = &fixture.svg else {
+            continue;
+        };
+        let scene: Scene = serde_json::from_value(fixture.scene).unwrap();
+        let ours = roughdraft::svg::export(&scene, &roughdraft::svg::SvgOptions::default());
+        let name = &fixture.name;
+        failures.extend(
+            compare_marks(svg_marks(reference), svg_marks(&ours))
+                .into_iter()
+                .map(|f| format!("{name}: {f}")),
+        );
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn detects_a_changed_seed() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenes");
@@ -96,8 +121,10 @@ enum Token {
 }
 
 fn compare(scene: &Scene, svg: &str) -> Vec<String> {
-    let want = svg_marks(svg);
-    let got = our_marks(scene);
+    compare_marks(svg_marks(svg), our_marks(scene))
+}
+
+fn compare_marks(want: Vec<(Affine, Mark)>, got: Vec<(Affine, Mark)>) -> Vec<String> {
     if want.len() != got.len() {
         return vec![format!(
             "{} marks in the SVG, {} drawn",
@@ -249,6 +276,8 @@ fn our_marks(scene: &Scene) -> Vec<(Affine, Mark)> {
                         },
                     ));
                 }
+                // Excalidraw exports images as <use> of a <symbol>; not compared.
+                Item::Image { .. } => {}
                 Item::Text(block) => {
                     for (i, line) in block.lines.into_iter().enumerate() {
                         let anchor = match block.align {
@@ -346,6 +375,9 @@ fn parse_transform(text: &str) -> Affine {
         .flat_map(str::split_whitespace)
         .map(number)
         .collect();
+    if let [a, b, c, d, e, f] = numbers[..] {
+        return Affine::from_coefficients([a, b, c, d, e, f]);
+    }
     let [x, y, degrees, cx, cy] = numbers[..] else {
         panic!("unexpected transform {text:?}");
     };

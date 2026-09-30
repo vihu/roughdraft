@@ -127,3 +127,32 @@ fn clicking_a_swatch_restyles_the_selection_without_deselecting() {
     );
     assert_eq!(sketch.scene().elements[0].base.stroke_color, "#e03131");
 }
+
+#[test]
+fn inserted_image_file_lands_centred_in_the_view_as_a_data_url() {
+    let mut png = Vec::new();
+    image::RgbaImage::new(40, 20)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let mut sketch = Sketch::new(Scene::default());
+    sketch.set_origin([0.0, 0.0]);
+    assert!(sketch.insert_image(b"not an image").is_err());
+    sketch.insert_image(&png).unwrap();
+
+    let image = sketch.scene().elements.last().unwrap();
+    // The default 800x600 view is centred on scene (400, 300).
+    assert_eq!(
+        (
+            image.base.x,
+            image.base.y,
+            image.base.width,
+            image.base.height
+        ),
+        (380.0, 290.0, 40.0, 20.0)
+    );
+    let url = sketch
+        .scene()
+        .file_data_url(image.file_id().unwrap())
+        .unwrap();
+    assert!(url.starts_with("data:image/png;base64,iVBOR"), "{url}");
+}

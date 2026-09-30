@@ -30,6 +30,8 @@ impl Editor {
             return;
         };
         let is_text = matches!(original.kind, Kind::Text(_));
+        // Images keep their aspect ratio unless Shift is held.
+        let is_image = original.file_id().is_some();
         let local = frame.transform.inverse().apply(at);
         let pointer = [local[0] - offset[0], local[1] - offset[1]];
         let [x1, y1, x2, y2] = frame.bounds;
@@ -38,7 +40,7 @@ impl Editor {
             handle,
             pointer,
             modifiers.alt,
-            modifiers.shift || is_text,
+            (modifiers.shift != is_image) || is_text,
         );
         if bounds[2] == bounds[0] && bounds[3] == bounds[1] {
             return;

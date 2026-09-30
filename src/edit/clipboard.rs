@@ -93,3 +93,42 @@ impl Editor {
         true
     }
 }
+
+/// Longest side of a newly inserted image, in scene units.
+// ponytail: fixed cap; Excalidraw fits new images to half the viewport height
+const INSERTED_IMAGE_MAX: f64 = 600.0;
+
+impl Editor {
+    /// Inserts an image centred on `at`, sized to its natural `size` (capped),
+    /// storing `data_url` in the scene's files. Returns the element id.
+    pub fn insert_image(
+        &mut self,
+        data_url: String,
+        mime: &str,
+        size: [f64; 2],
+        at: Point,
+    ) -> String {
+        self.finish_text();
+        let before = self.scene.elements.clone();
+        let file_id = crate::random::id();
+        self.scene.insert_file(&file_id, mime, data_url);
+        let scale = (INSERTED_IMAGE_MAX / size[0].max(size[1])).min(1.0);
+        let (width, height) = (size[0] * scale, size[1] * scale);
+        let mut base = self.style.base([at[0] - width / 2.0, at[1] - height / 2.0]);
+        base.width = width;
+        base.height = height;
+        base.stroke_color = "transparent".into();
+        base.background_color = "transparent".into();
+        let mut element = Element::new(crate::scene::Kind::Other("image".into()), base);
+        let json = element.json_mut();
+        json.insert("fileId".into(), file_id.into());
+        json.insert("status".into(), "saved".into());
+        json.insert("scale".into(), json!([1, 1]));
+        json.insert("crop".into(), Value::Null);
+        let id = element.base.id.clone();
+        self.scene.elements.push(element);
+        self.history.record(before);
+        self.selected = std::iter::once(id.clone()).collect();
+        id
+    }
+}
