@@ -191,3 +191,38 @@ fn uniform_multi_resize_scales_label_fonts() {
     // "hi" at 40: 44 x 50, centred in b.
     assert_eq!((label.base.x, label.base.y), (478.0, 25.0));
 }
+
+#[test]
+fn line_points_drag_and_a_midpoint_adds_a_point() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Line));
+    drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
+    let handles = editor.handles().unwrap();
+    assert!(handles.handles.is_empty(), "no box for a 2-point line");
+    assert_eq!(handles.midpoint, Some([50.0, 0.0]));
+
+    drag(&mut editor, [50.0, 0.0], [50.0, 40.0], NONE);
+    let points = |editor: &Editor| match &editor.scene().elements[0].kind {
+        Kind::Line(line) => line.points.clone(),
+        _ => unreachable!(),
+    };
+    assert_eq!(points(&editor), [[0.0, 0.0], [50.0, 40.0], [100.0, 0.0]]);
+    let handles = editor.handles().unwrap();
+    assert!(!handles.handles.is_empty(), "3 points get the box too");
+    assert_eq!(handles.points.len(), 3);
+    assert_eq!(handles.midpoint, None);
+
+    // Any point drags; the first re-bases the line.
+    drag(&mut editor, [0.0, 0.0], [-10.0, 5.0], NONE);
+    assert_eq!(points(&editor), [[0.0, 0.0], [60.0, 35.0], [110.0, -5.0]]);
+    assert_eq!(
+        (
+            editor.scene().elements[0].base.x,
+            editor.scene().elements[0].base.y
+        ),
+        (-10.0, 5.0)
+    );
+    editor.command(Command::Undo);
+    editor.command(Command::Undo);
+    assert_eq!(points(&editor), [[0.0, 0.0], [100.0, 0.0]]);
+}

@@ -182,11 +182,12 @@ fn arrow_tool_drawing_and_moving_suggest_binding_targets() {
         Some(rect.clone())
     );
 
-    // Moving the arrow suggests its shape while the end stays close.
-    editor.pointer(Pointer::Down, [-50.0, 50.0], NONE);
-    editor.pointer(Pointer::Move, [-49.0, 50.0], NONE);
+    // Moving the arrow suggests its shape while the end stays close (away
+    // from the midpoint at -52.5, which would add a point).
+    editor.pointer(Pointer::Down, [-80.0, 50.0], NONE);
+    editor.pointer(Pointer::Move, [-79.0, 50.0], NONE);
     assert_eq!(suggested(&editor), Some(rect));
-    editor.pointer(Pointer::Move, [-150.0, 50.0], NONE);
+    editor.pointer(Pointer::Move, [-180.0, 50.0], NONE);
     assert_eq!(suggested(&editor), None);
-    editor.pointer(Pointer::Up, [-150.0, 50.0], NONE);
+    editor.pointer(Pointer::Up, [-180.0, 50.0], NONE);
 }

@@ -41,15 +41,23 @@ pub struct Handles {
     /// resize along the border and have no drawn handle, like desktop
     /// Excalidraw.
     pub handles: Vec<(Handle, Point)>,
-    /// Endpoints of a selected 2-point line or arrow, in scene units.
+    /// Points of a selected line or arrow, in scene units; each can be
+    /// dragged.
     pub points: Vec<Point>,
+    /// Middle of a selected 2-point line or arrow long enough to have one;
+    /// dragging it adds a point there.
+    pub midpoint: Option<Point>,
 }
 
 /// Transform handle size in screen pixels (mouse).
 pub const HANDLE_SIZE: f64 = 8.0;
 
-/// Endpoint handle radius in screen pixels (`POINT_HANDLE_SIZE / 2`).
+/// Point handle radius in screen pixels (`POINT_HANDLE_SIZE / 2`).
 pub const POINT_RADIUS: f64 = 5.0;
+
+/// Segments shorter than this on screen get no midpoint handle
+/// (`isSegmentTooShort`: `POINT_HANDLE_SIZE * 4`).
+const MIDPOINT_MIN_LENGTH: f64 = 40.0;
 
 /// Gap between the box and its handles, in screen pixels.
 const SPACING: f64 = 2.0;
@@ -76,11 +84,15 @@ impl Editor {
         if self.text.is_some() || !matches!(self.gesture, None | Some(Gesture::Resize { .. })) {
             return None;
         }
-        if let Some(points) = self.endpoints() {
+        let points = self.line_points().unwrap_or_default();
+        // A 2-point line shows only its points (`shouldShowBoundingBox`).
+        if let [a, b] = points[..] {
+            let long = (b[0] - a[0]).hypot(b[1] - a[1]) * self.zoom >= MIDPOINT_MIN_LENGTH;
             return Some(Handles {
                 angle: 0.0,
                 handles: Vec::new(),
                 points,
+                midpoint: long.then(|| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]),
             });
         }
         let frame = self.frame()?;
@@ -108,7 +120,8 @@ impl Editor {
         Some(Handles {
             angle: frame.transform.rotation(),
             handles,
-            points: Vec::new(),
+            points,
+            midpoint: None,
         })
     }
 
@@ -116,7 +129,8 @@ impl Editor {
     /// edges.
     pub fn handle_at(&self, at: Point) -> Option<Handle> {
         let handles = self.handles()?;
-        if !handles.points.is_empty() {
+        // A 2-point line has no box to resize by.
+        if handles.handles.is_empty() {
             return None;
         }
         let frame = self.frame()?;
@@ -179,34 +193,43 @@ impl Editor {
         }
     }
 
-    /// Endpoints of the selected element when it is a 2-point line or arrow.
-    fn endpoints(&self) -> Option<Vec<Point>> {
+    /// Points of the selected element when it is a lone line or arrow, in
+    /// scene units.
+    fn line_points(&self) -> Option<Vec<Point>> {
         let selected: Vec<&Element> = self.selection().collect();
         let [one] = selected[..] else { return None };
         let (Kind::Line(line) | Kind::Arrow(line)) = &one.kind else {
             return None;
         };
-        (line.points.len() == 2).then(|| {
-            let transform = geometry::element_transform(one);
-            line.points.iter().map(|p| transform.apply(*p)).collect()
-        })
+        let transform = geometry::element_transform(one);
+        Some(line.points.iter().map(|p| transform.apply(*p)).collect())
     }
 
-    /// Starts a resize, rotation or endpoint drag when `at` is on a handle.
+    /// Starts a resize, rotation or point drag when `at` is on a handle. A
+    /// press on a 2-point line's midpoint adds a point there and drags it.
     pub(super) fn press_handle(&mut self, at: Point) -> bool {
-        if let Some(points) = self.endpoints() {
-            let reach = (POINT_RADIUS + 2.0) / self.zoom;
-            let Some(which) = points
-                .iter()
-                .position(|p| (p[0] - at[0]).hypot(p[1] - at[1]) <= reach)
-            else {
-                return false;
-            };
+        let reach = (POINT_RADIUS + 2.0) / self.zoom;
+        let near = |p: &Point| (p[0] - at[0]).hypot(p[1] - at[1]) <= reach;
+        let handles = self.handles();
+        let point = handles
+            .as_ref()
+            .and_then(|h| h.points.iter().position(near));
+        let midpoint = handles.as_ref().and_then(|h| h.midpoint).filter(near);
+        if point.is_some() || midpoint.is_some() {
             let index = self.selection_indices()[0];
+            let before = self.scene.elements.clone();
+            let which = match (point, midpoint) {
+                (Some(which), _) => which,
+                (None, Some(middle)) => {
+                    self.insert_point(index, 1, middle);
+                    1
+                }
+                (None, None) => unreachable!("checked above"),
+            };
             self.gesture = Some(Gesture::Endpoint {
                 index,
                 which,
-                before: self.scene.elements.clone(),
+                before,
             });
             return true;
         }

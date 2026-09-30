@@ -218,10 +218,33 @@ impl Editor {
         };
         let mut points = line.points.clone();
         let local = geometry::element_transform(element).inverse().apply(at);
-        let other = points[1 - which];
+        // Shift snaps the angle to the neighbour before it (after it for the
+        // first point).
+        let other = points[if which == 0 { 1 } else { which - 1 }];
         let offset =
             super::create::lock_angle([local[0] - other[0], local[1] - other[1]], modifiers.shift);
         points[which] = [other[0] + offset[0], other[1] + offset[1]];
+        self.rebase_points(index, points);
+    }
+
+    /// Inserts a point, given in scene units, before position `at` of the
+    /// line or arrow at `index`.
+    pub(super) fn insert_point(&mut self, index: usize, at: usize, point: Point) {
+        let element = &self.scene.elements[index];
+        let (Kind::Line(line) | Kind::Arrow(line)) = &element.kind else {
+            return;
+        };
+        let mut points = line.points.clone();
+        points.insert(
+            at,
+            geometry::element_transform(element).inverse().apply(point),
+        );
+        self.rebase_points(index, points);
+    }
+
+    /// Sets local points, moving `x`/`y` so the first point stays at
+    /// `[0, 0]`, and keeps any label on the line's middle.
+    fn rebase_points(&mut self, index: usize, points: Vec<Point>) {
         let shift = points[0];
         let points: Vec<Point> = points
             .iter()
@@ -231,6 +254,16 @@ impl Editor {
         element.base.x += shift[0];
         element.base.y += shift[1];
         self.set_points(index, points);
+        let id = self.scene.elements[index].base.id.clone();
+        let labels: Vec<(usize, Element)> = self
+            .scene
+            .elements
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| container_id(e) == Some(id.as_str()))
+            .map(|(i, e)| (i, e.clone()))
+            .collect();
+        self.sync_labels(&labels);
     }
 
     /// Puts labels back inside their containers after a resize or rotation:

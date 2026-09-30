@@ -54,6 +54,19 @@ impl Sketch {
                 },
             );
         }
+        // The phantom point that adds a point when dragged: filled, no outline.
+        if let Some(midpoint) = handles.midpoint {
+            let [x, y] = view.apply(midpoint);
+            let circle = Path::circle(
+                iced::Point::new(x as f32, y as f32),
+                edit::POINT_RADIUS as f32,
+            );
+            let phantom = Rgba {
+                a: 0.7,
+                ..Rgba::rgb(177.0 / 255.0, 151.0 / 255.0, 252.0 / 255.0)
+            };
+            frame.fill(&circle, self.paint(phantom));
+        }
     }
 
     /// Excalidraw's binding highlight: a wide, faint outline just outside
@@ -142,8 +155,10 @@ impl Sketch {
         let typing = self.editor.editing().is_some();
         let selected: Vec<_> = self.editor.selection().filter(|_| !typing).collect();
         let handles = self.editor.handles();
-        // A lone 2-point line shows only its endpoint handles, no border.
-        let bordered = !handles.as_ref().is_some_and(|h| !h.points.is_empty());
+        // A lone 2-point line shows only its point handles, no border.
+        let bordered = !handles
+            .as_ref()
+            .is_some_and(|h| h.handles.is_empty() && !h.points.is_empty());
         // Selected groups get one dashed box instead of per-element borders.
         for (_, [x1, y1, x2, y2]) in self.editor.selected_groups() {
             let corners = [
