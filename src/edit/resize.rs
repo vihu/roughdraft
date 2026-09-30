@@ -34,6 +34,10 @@ impl Editor {
         let is_image = original.file_id().is_some();
         let local = frame.transform.inverse().apply(at);
         let pointer = [local[0] - offset[0], local[1] - offset[1]];
+        if is_text && matches!(handle, Handle::E | Handle::W) {
+            self.resize_text_width(*index, original, frame, handle, pointer);
+            return;
+        }
         let [x1, y1, x2, y2] = frame.bounds;
         let bounds = resized_box(
             [x1, y1, x2, y2],

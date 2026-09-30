@@ -370,6 +370,15 @@ impl Element {
             .unwrap_or(false)
     }
 
+    /// Whether text grows to fit what is typed (`autoResize`, default true);
+    /// false once a side resize fixed its width, so it wraps instead.
+    pub fn auto_resize(&self) -> bool {
+        self.json
+            .get("autoResize")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+    }
+
     /// Returns an image element's file id.
     pub fn file_id(&self) -> Option<&str> {
         match &self.kind {

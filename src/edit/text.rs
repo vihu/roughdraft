@@ -2,6 +2,7 @@
 //! `element/newElement.ts`, `element/textMeasurements.ts`, `App.startTextEditing`).
 use std::f64::consts::SQRT_2;
 
+use super::transform::{Frame, Handle};
 use super::{Editor, Tool};
 use crate::geometry::Point;
 use crate::hit::{self, container_id};
@@ -37,6 +38,9 @@ pub(super) struct TextEdit {
 
 /// Gap between a container's edge and its label (`BOUND_TEXT_PADDING`).
 const PADDING: f64 = 5.0;
+
+/// Narrowest free text a side resize leaves (`getMinTextElementWidth`).
+const MIN_TEXT_WIDTH: f64 = 2.0 * PADDING;
 
 /// Clicking within this distance of a shape's centre with the text tool
 /// labels the shape (`TEXT_TO_CENTER_SNAP_THRESHOLD`).
@@ -135,17 +139,22 @@ impl Editor {
             return;
         };
         let (family, size, align) = (label.font_family, label.font_size, label.text_align.clone());
-        let shown = match container {
-            Some(c) => wrap(
+        // Free text with a fixed width (after a side resize) wraps to it.
+        let fixed = (container.is_none() && !self.scene.elements[index].auto_resize())
+            .then_some(self.scene.elements[index].base.width);
+        let shown = match (container, fixed) {
+            (Some(c), _) => wrap(
                 &original,
                 max_label_width(&self.scene.elements[c], size),
                 family,
                 size,
                 &*self.measure,
             ),
-            None => original.clone(),
+            (None, Some(width)) => wrap(&original, width, family, size, &*self.measure),
+            (None, None) => original.clone(),
         };
-        let (width, height) = self.measure_block(&shown, family, size);
+        let (measured, height) = self.measure_block(&shown, family, size);
+        let width = fixed.unwrap_or(measured);
         let element = &mut self.scene.elements[index];
         if let Kind::Text(text) = &mut element.kind {
             text.text = shown;
@@ -189,6 +198,53 @@ impl Editor {
             let start = vec![(index, self.scene.elements[index].clone())];
             self.sync_labels(&start);
         }
+    }
+
+    /// Sets free text's width from a side handle (`resizeSingleTextElement`,
+    /// e and w): the text re-wraps at the same font size, the box keeps its
+    /// top edge and the side across from the handle, and `autoResize` turns
+    /// off so later edits wrap too. `pointer` is in the frame's coordinates.
+    pub(super) fn resize_text_width(
+        &mut self,
+        index: usize,
+        original: &Element,
+        frame: &Frame,
+        handle: Handle,
+        pointer: Point,
+    ) {
+        let Kind::Text(text) = &original.kind else {
+            return;
+        };
+        let [x1, y1, x2, _] = frame.bounds;
+        let width = match handle {
+            Handle::W => x2 - pointer[0],
+            _ => pointer[0] - x1,
+        }
+        .max(MIN_TEXT_WIDTH);
+        let (family, size) = (text.font_family, text.font_size);
+        let shown = wrap(
+            original.original_text(),
+            width,
+            family,
+            size,
+            &*self.measure,
+        );
+        let (_, height) = self.measure_block(&shown, family, size);
+        let left = if handle == Handle::W { x2 - width } else { x1 };
+        let [cx, cy] = frame
+            .transform
+            .apply([left + width / 2.0, y1 + height / 2.0]);
+        let mut element = original.clone();
+        if let Kind::Text(text) = &mut element.kind {
+            text.text = shown;
+        }
+        element.base.x = cx - width / 2.0;
+        element.base.y = cy - height / 2.0;
+        element.base.width = width;
+        element.base.height = height;
+        element.json_mut().insert("autoResize".into(), false.into());
+        element.touch();
+        self.scene.elements[index] = element;
     }
 
     /// Pastes plain text as a new text element centred on `at`.

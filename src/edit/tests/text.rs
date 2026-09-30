@@ -128,3 +128,39 @@ fn arrow_label_sits_on_the_middle_point_not_the_box_centre() {
     // ApproxMeasure: 22 x 25, centred on the corner point (100, 200).
     assert_eq!((label.base.x, label.base.y), (89.0, 187.5));
 }
+
+#[test]
+fn side_resize_wraps_free_text_and_later_edits_keep_the_width() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Text));
+    click(&mut editor, [300.0, 300.0]);
+    editor.set_text("hello world foo");
+    editor.finish_text();
+    editor.command(Command::Tool(Tool::Selection));
+    let text = editor.scene().elements[0].clone();
+    let (x, y, w, h) = (text.base.x, text.base.y, text.base.width, text.base.height);
+    assert_eq!((w, h), (165.0, 25.0), "ApproxMeasure: 15 chars");
+    click(&mut editor, [x + 20.0, y + h / 2.0]);
+    let right = [x + w + 4.0, y + h / 2.0];
+    assert_eq!(editor.handle_at(right), Some(crate::edit::Handle::E));
+    drag(&mut editor, right, [x + 74.0, y + h / 2.0], NONE);
+
+    let text = &editor.scene().elements[0];
+    let Kind::Text(body) = &text.kind else {
+        unreachable!()
+    };
+    assert_eq!(body.text, "hello\nworld\nfoo");
+    assert_eq!(body.font_size, 20.0, "the font keeps its size");
+    assert_eq!(
+        (text.base.x, text.base.y, text.base.width, text.base.height),
+        (x, y, 70.0, 75.0)
+    );
+    assert!(!text.auto_resize());
+
+    let id = text.base.id.clone();
+    editor.double_click([x + 10.0, y + 10.0]);
+    assert_eq!(editor.editing().map(|e| e.base.id.clone()), Some(id));
+    editor.set_text("hello world foo bar");
+    assert_eq!(text_of(&editor), "hello\nworld\nfoo\nbar");
+    assert_eq!(editor.editing().unwrap().base.width, 70.0);
+}
