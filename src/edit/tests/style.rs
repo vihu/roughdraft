@@ -115,3 +115,23 @@ fn copied_styles_paste_onto_the_selection_with_fitting_roundness() {
     editor.command(Command::Undo);
     assert_eq!(editor.scene().elements[3].base.stroke_color, "#1e1e1e");
 }
+
+#[test]
+fn label_alignment_shows_and_changes_through_its_shape() {
+    let mut editor = editor();
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], NONE);
+    assert!(editor.is_selected("b"));
+    assert_eq!(
+        editor.current_style().text_align,
+        crate::scene::TextAlign::Center,
+        "the label's"
+    );
+    editor.apply_style(StyleChange::TextAlign(crate::scene::TextAlign::Left));
+    let label = &editor.scene().elements[2];
+    let Kind::Text(text) = &label.kind else {
+        panic!("label")
+    };
+    assert_eq!(text.text_align, crate::scene::TextAlign::Left);
+    // b spans 200..300; left-aligned labels sit 5 in from the edge.
+    assert_eq!(label.base.x, 205.0);
+}

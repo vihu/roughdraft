@@ -13,8 +13,22 @@ impl Editor {
     /// Returns the style the panel shows: the first selected element's, or
     /// the style for new elements.
     pub fn current_style(&self) -> Style {
-        let first = self.selection().find(|e| container_id(e).is_none());
-        first.map_or_else(|| self.style.clone(), |element| self.style.of(element))
+        let Some(first) = self.selection().find(|e| container_id(e).is_none()) else {
+            return self.style.clone();
+        };
+        let mut style = self.style.of(first);
+        // A labelled shape shows its label's text properties (`getFormValue`).
+        let label = self
+            .scene
+            .elements
+            .iter()
+            .find(|e| !e.base.is_deleted && container_id(e) == Some(first.base.id.as_str()));
+        if let Some(Kind::Text(text)) = label.map(|l| &l.kind) {
+            style.font_size = text.font_size;
+            style.font_family = text.font_family;
+            style.text_align = text.text_align.clone();
+        }
+        style
     }
 
     /// Applies a style change to new elements and to the selection (labels
@@ -65,9 +79,7 @@ impl Editor {
                     text.font_family = *family;
                     text.line_height = super::text::line_height(*family);
                 }
-                (StyleChange::TextAlign(align), Kind::Text(text))
-                    if text.container_id.is_none() =>
-                {
+                (StyleChange::TextAlign(align), Kind::Text(text)) => {
                     text.text_align = align.clone();
                 }
                 _ => {}
@@ -76,9 +88,10 @@ impl Editor {
                 element.touch();
             }
         }
+        // Text is laid out again; labels move within their shape.
         if matches!(
             change,
-            StyleChange::FontSize(_) | StyleChange::FontFamily(_)
+            StyleChange::FontSize(_) | StyleChange::FontFamily(_) | StyleChange::TextAlign(_)
         ) {
             let texts: Vec<(usize, String)> = self
                 .moving()

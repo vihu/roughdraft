@@ -229,93 +229,67 @@ impl Sketch {
                     ColorField::Background,
                 ),
             ));
-            sections.push(section(
-                "Fill",
-                choices(&[
+            let fills = [
+                (FillStyle::Hachure, "Hachure"),
+                (FillStyle::CrossHatch, "Cross-hatch"),
+                (FillStyle::Solid, "Solid"),
+            ]
+            .map(|(fill, name)| {
+                let active = style.fill_style == fill;
+                (
+                    Glyph::Fill(fill.clone()),
+                    name,
+                    active,
+                    StyleChange::FillStyle(fill),
+                )
+            });
+            sections.push(section("Fill", self.icon_choices(fills)));
+            let widths = [(1, "Thin"), (2, "Bold"), (4, "Extra bold")].map(|(width, name)| {
+                let active = style.stroke_width == f64::from(width);
+                (
+                    Glyph::Width(width),
+                    name,
+                    active,
+                    StyleChange::StrokeWidth(f64::from(width)),
+                )
+            });
+            sections.push(section("Stroke width", self.icon_choices(widths)));
+            let dashes = [
+                (StrokeStyle::Solid, "Solid"),
+                (StrokeStyle::Dashed, "Dashed"),
+                (StrokeStyle::Dotted, "Dotted"),
+            ]
+            .map(|(dash, name)| {
+                let active = style.stroke_style == dash;
+                (
+                    Glyph::Dash(dash.clone()),
+                    name,
+                    active,
+                    StyleChange::StrokeStyle(dash),
+                )
+            });
+            sections.push(section("Stroke style", self.icon_choices(dashes)));
+            let roughness =
+                [(0, "Architect"), (1, "Artist"), (2, "Cartoonist")].map(|(level, name)| {
+                    let active = style.roughness == f64::from(level);
                     (
-                        "Hachure",
-                        style.fill_style == FillStyle::Hachure,
-                        StyleChange::FillStyle(FillStyle::Hachure),
-                    ),
-                    (
-                        "Cross",
-                        style.fill_style == FillStyle::CrossHatch,
-                        StyleChange::FillStyle(FillStyle::CrossHatch),
-                    ),
-                    (
-                        "Solid",
-                        style.fill_style == FillStyle::Solid,
-                        StyleChange::FillStyle(FillStyle::Solid),
-                    ),
-                ]),
-            ));
-            sections.push(section(
-                "Stroke width",
-                choices(&[
-                    (
-                        "Thin",
-                        style.stroke_width == 1.0,
-                        StyleChange::StrokeWidth(1.0),
-                    ),
-                    (
-                        "Bold",
-                        style.stroke_width == 2.0,
-                        StyleChange::StrokeWidth(2.0),
-                    ),
-                    (
-                        "Extra",
-                        style.stroke_width == 4.0,
-                        StyleChange::StrokeWidth(4.0),
-                    ),
-                ]),
-            ));
-            sections.push(section(
-                "Stroke style",
-                choices(&[
-                    (
-                        "Solid",
-                        style.stroke_style == StrokeStyle::Solid,
-                        StyleChange::StrokeStyle(StrokeStyle::Solid),
-                    ),
-                    (
-                        "Dashed",
-                        style.stroke_style == StrokeStyle::Dashed,
-                        StyleChange::StrokeStyle(StrokeStyle::Dashed),
-                    ),
-                    (
-                        "Dotted",
-                        style.stroke_style == StrokeStyle::Dotted,
-                        StyleChange::StrokeStyle(StrokeStyle::Dotted),
-                    ),
-                ]),
-            ));
-            sections.push(section(
-                "Sloppiness",
-                choices(&[
-                    (
-                        "Architect",
-                        style.roughness == 0.0,
-                        StyleChange::Roughness(0.0),
-                    ),
-                    (
-                        "Artist",
-                        style.roughness == 1.0,
-                        StyleChange::Roughness(1.0),
-                    ),
-                    (
-                        "Cartoonist",
-                        style.roughness == 2.0,
-                        StyleChange::Roughness(2.0),
-                    ),
-                ]),
-            ));
-            sections.push(section(
-                "Edges",
-                choices(&[
-                    ("Sharp", !style.round_edges, StyleChange::RoundEdges(false)),
-                    ("Round", style.round_edges, StyleChange::RoundEdges(true)),
-                ]),
-            ));
+                        Glyph::Rough(level),
+                        name,
+                        active,
+                        StyleChange::Roughness(f64::from(level)),
+                    )
+                });
+            sections.push(section("Sloppiness", self.icon_choices(roughness)));
+            let edges = [(false, "Sharp"), (true, "Round")].map(|(round, name)| {
+                let active = style.round_edges == round;
+                (
+                    Glyph::Edges { round },
+                    name,
+                    active,
+                    StyleChange::RoundEdges(round),
+                )
+            });
+            sections.push(section("Edges", self.icon_choices(edges)));
         }
         if arrows {
             sections.push(section("Arrowheads", arrowheads(&style)));
@@ -345,26 +319,21 @@ impl Sketch {
                     ("Code", style.font_family == 8, StyleChange::FontFamily(8)),
                 ]),
             ));
-            sections.push(section(
-                "Align",
-                choices(&[
-                    (
-                        "Left",
-                        style.text_align == TextAlign::Left,
-                        StyleChange::TextAlign(TextAlign::Left),
-                    ),
-                    (
-                        "Center",
-                        style.text_align == TextAlign::Center,
-                        StyleChange::TextAlign(TextAlign::Center),
-                    ),
-                    (
-                        "Right",
-                        style.text_align == TextAlign::Right,
-                        StyleChange::TextAlign(TextAlign::Right),
-                    ),
-                ]),
-            ));
+            let aligns = [
+                (TextAlign::Left, "Left"),
+                (TextAlign::Center, "Center"),
+                (TextAlign::Right, "Right"),
+            ]
+            .map(|(align, name)| {
+                let active = style.text_align == align;
+                (
+                    Glyph::Align(align.clone()),
+                    name,
+                    active,
+                    StyleChange::TextAlign(align),
+                )
+            });
+            sections.push(section("Align", self.icon_choices(aligns)));
         }
         let opacity = slider(0.0..=100.0, style.opacity, |value| {
             Message(Input::Style(StyleChange::Opacity(value)))
@@ -390,6 +359,34 @@ impl Sketch {
 }
 
 impl Sketch {
+    /// A row of icon buttons for a style property, the current one
+    /// highlighted, each named in a tooltip.
+    fn icon_choices<'a, const N: usize>(
+        &self,
+        options: [(Glyph, &'static str, bool, StyleChange); N],
+    ) -> Element<'a, Message> {
+        let theme = self.theme();
+        let palette = theme.palette();
+        let (on_primary, on_secondary) = (palette.primary.base.text, palette.secondary.base.text);
+        row(options.into_iter().map(|(glyph, name, active, change)| {
+            let color = if active { on_primary } else { on_secondary };
+            let button = button(icon(glyph, color))
+                .padding(4)
+                .style(if active {
+                    button::primary
+                } else {
+                    button::secondary
+                })
+                .on_press(Message(Input::Style(change)));
+            let tip = container(text(name).size(12))
+                .padding([4, 8])
+                .style(panel_style);
+            tooltip(button, tip, tooltip::Position::Bottom).into()
+        }))
+        .spacing(4)
+        .into()
+    }
+
     /// Quick-pick swatches with a hex field under them for any other colour.
     fn colors<'a>(
         &self,
