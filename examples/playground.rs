@@ -8,8 +8,11 @@
 //!
 //! Ctrl+O opens, Ctrl+S saves (Save As when the file is new or a Keeprs memo),
 //! Ctrl+Shift+S saves as, Alt+Shift+D toggles dark mode. The canvas follows
-//! Excalidraw's shortcuts: V selection, H hand, Space or middle-drag to pan,
-//! Ctrl+scroll to zoom, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z, arrows.
+//! Excalidraw's shortcuts: V selection, H hand, R rectangle, D diamond,
+//! O ellipse, A arrow, L line (drag, or click point by point and finish with
+//! Enter, Escape or a second click), Q keeps the tool, Space or middle-drag
+//! pans, Ctrl+scroll zooms, Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
+//! arrow keys nudge.
 //!
 //! `--snapshot` renders headlessly at 100% zoom and writes
 //! `out-<renderer>.png` (2x pixel density) instead of opening a window.

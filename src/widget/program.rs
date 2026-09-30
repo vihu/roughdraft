@@ -131,11 +131,15 @@ impl canvas::Program<Message> for Sketch {
                     self.clear_caches();
                     return Some(canvas::Action::request_redraw().and_capture());
                 }
-                if !camera.pressed {
+                let pointer = if camera.pressed {
+                    Pointer::Move
+                } else if self.editor.wants_hover() {
+                    Pointer::Hover
+                } else {
                     return None;
-                }
+                };
                 let at = camera.scene_point(self, bounds, *position);
-                publish(Input::Pointer(Pointer::Move, at, camera.modifiers()))
+                publish(Input::Pointer(pointer, at, camera.modifiers()))
             }
             Event::Mouse(mouse::Event::ButtonReleased(_)) => {
                 if camera.pan_from.take().is_some() {
@@ -242,6 +246,9 @@ impl canvas::Program<Message> for Sketch {
         }
         if camera.space || self.editor.tool() == Tool::Hand {
             return mouse::Interaction::Grab;
+        }
+        if !matches!(self.editor.tool(), Tool::Selection) {
+            return mouse::Interaction::Crosshair;
         }
         if self
             .editor

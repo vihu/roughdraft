@@ -269,7 +269,8 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
     let step = if shift { NUDGE.1 } else { NUDGE.0 };
     match key.as_ref() {
         Key::Named(Named::Delete | Named::Backspace) if !command => Some(Command::Delete),
-        Key::Named(Named::Escape) => Some(Command::Tool(Tool::Selection)),
+        Key::Named(Named::Escape) => Some(Command::Escape),
+        Key::Named(Named::Enter) => Some(Command::Finish),
         Key::Named(Named::ArrowLeft) => Some(Command::Nudge([-step, 0.0])),
         Key::Named(Named::ArrowRight) => Some(Command::Nudge([step, 0.0])),
         Key::Named(Named::ArrowUp) => Some(Command::Nudge([0.0, -step])),
@@ -280,8 +281,16 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
             ("y", true) => Some(Command::Redo),
             ("d", true) => Some(Command::Duplicate),
             ("a", true) => Some(Command::SelectAll),
-            ("v" | "1", false) if !alt => Some(Command::Tool(Tool::Selection)),
-            ("h", false) if !alt => Some(Command::Tool(Tool::Hand)),
+            (_, true) => None,
+            _ if alt => None,
+            ("v" | "1", _) => Some(Command::Tool(Tool::Selection)),
+            ("h", _) => Some(Command::Tool(Tool::Hand)),
+            ("r" | "2", _) => Some(Command::Tool(Tool::Rectangle)),
+            ("d" | "3", _) => Some(Command::Tool(Tool::Diamond)),
+            ("o" | "4", _) => Some(Command::Tool(Tool::Ellipse)),
+            ("a" | "5", _) => Some(Command::Tool(Tool::Arrow)),
+            ("l" | "6", _) => Some(Command::Tool(Tool::Line)),
+            ("q", _) => Some(Command::ToggleLock),
             _ => None,
         },
         _ => None,
@@ -348,6 +357,14 @@ mod tests {
             Some(Command::Redo)
         );
         assert_eq!(shortcut(&key("d"), ctrl), Some(Command::Duplicate));
+        assert_eq!(
+            shortcut(&key("d"), Modifiers::empty()),
+            Some(Command::Tool(Tool::Diamond))
+        );
+        assert_eq!(
+            shortcut(&key("5"), Modifiers::empty()),
+            Some(Command::Tool(Tool::Arrow))
+        );
         assert_eq!(
             shortcut(&key("h"), Modifiers::empty()),
             Some(Command::Tool(Tool::Hand))

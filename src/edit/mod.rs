@@ -3,12 +3,18 @@
 //! The widget converts input to scene coordinates and calls [`Editor`]; every
 //! interaction is testable without a window. Behaviour follows Excalidraw
 //! 0.18 as recorded in `.ai-docs/REFERENCE-001-excalidraw-editing-spec.md`.
-use std::collections::{HashMap, HashSet};
+mod commands;
+mod create;
+mod select;
+mod style;
 
+use std::collections::HashSet;
+
+pub use self::style::Style;
 use crate::geometry::{self, Bounds, Point};
 use crate::history::History;
 use crate::hit::{self, container_id};
-use crate::scene::{Element, Kind, Scene};
+use crate::scene::{Element, Scene};
 
 /// A scene being edited: selection, active tool, gesture and undo history.
 #[derive(Debug)]
@@ -16,12 +22,15 @@ pub struct Editor {
     scene: Scene,
     selected: HashSet<String>,
     tool: Tool,
+    locked: bool,
+    style: Style,
     gesture: Option<Gesture>,
+    multi: Option<Multi>,
     history: History,
     zoom: f64,
 }
 
-/// What a pointer drag on the canvas does.
+/// What a pointer press on the canvas does.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Tool {
     /// Select and move elements.
@@ -29,6 +38,16 @@ pub enum Tool {
     Selection,
     /// Pan the canvas; the widget handles it.
     Hand,
+    /// Drag out a rectangle.
+    Rectangle,
+    /// Drag out a diamond.
+    Diamond,
+    /// Drag out an ellipse.
+    Ellipse,
+    /// Drag, or click point by point, to draw an arrow.
+    Arrow,
+    /// Drag, or click point by point, to draw a line.
+    Line,
 }
 
 /// Modifier keys held during a pointer event.
@@ -42,13 +61,16 @@ pub struct Modifiers {
     pub command: bool,
 }
 
-/// Primary-button pointer event phase.
+/// Pointer event phase for the primary button.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pointer {
     /// Button pressed.
     Down,
     /// Pointer moved with the button held.
     Move,
+    /// Pointer moved with no button held; sent only while
+    /// [`Editor::wants_hover`] is true.
+    Hover,
     /// Button released.
     Up,
 }
@@ -58,6 +80,12 @@ pub enum Pointer {
 pub enum Command {
     /// Switches tool. Any tool but selection clears the selection.
     Tool(Tool),
+    /// Keeps the current tool after drawing (Excalidraw's tool lock, Q).
+    ToggleLock,
+    /// Finishes what is being drawn and returns to the selection tool.
+    Escape,
+    /// Finishes a multi-point line or arrow (Enter).
+    Finish,
     /// Deletes the selection and its labels.
     Delete,
     /// Duplicates the selection, offset down and right.
@@ -89,10 +117,28 @@ enum Gesture {
         to: Point,
         keep: HashSet<String>,
     },
+    /// Dragging out a new rectangle, diamond or ellipse.
+    Shape {
+        index: usize,
+        origin: Point,
+        before: Vec<Element>,
+    },
+    /// Pressed with the line or arrow tool; `dragged` once past the threshold.
+    Line {
+        index: usize,
+        origin: Point,
+        before: Vec<Element>,
+        dragged: bool,
+    },
 }
 
-/// Scene units a duplicate is offset by (half the default grid).
-const DUPLICATE_OFFSET: f64 = 10.0;
+/// A line or arrow being drawn click by click; its last point follows the
+/// pointer until the next click.
+#[derive(Debug)]
+struct Multi {
+    index: usize,
+    before: Vec<Element>,
+}
 
 // Public API
 impl Editor {
@@ -102,7 +148,10 @@ impl Editor {
             scene,
             selected: HashSet::new(),
             tool: Tool::default(),
+            locked: false,
+            style: Style::default(),
             gesture: None,
+            multi: None,
             history: History::default(),
             zoom: 1.0,
         }
@@ -116,6 +165,16 @@ impl Editor {
     /// Returns the active tool.
     pub fn tool(&self) -> Tool {
         self.tool
+    }
+
+    /// Returns whether the tool stays active after drawing.
+    pub fn is_tool_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Returns the style for new elements.
+    pub fn style(&self) -> &Style {
+        &self.style
     }
 
     /// Returns whether the element is selected.
@@ -142,17 +201,27 @@ impl Editor {
     /// Returns the ids of elements that change on every pointer move of the
     /// current gesture, so the widget can keep the rest cached.
     pub fn active(&self) -> Vec<&str> {
-        match &self.gesture {
-            Some(Gesture::Move {
-                starts,
-                moved: true,
-                ..
-            }) => starts
-                .iter()
-                .map(|(i, _)| self.scene.elements[*i].base.id.as_str())
-                .collect(),
+        let id = |i: usize| self.scene.elements[i].base.id.as_str();
+        match (&self.gesture, &self.multi) {
+            (_, Some(multi)) => vec![id(multi.index)],
+            (
+                Some(Gesture::Move {
+                    starts,
+                    moved: true,
+                    ..
+                }),
+                _,
+            ) => starts.iter().map(|(i, _)| id(*i)).collect(),
+            (Some(Gesture::Shape { index, .. } | Gesture::Line { index, .. }), _) => {
+                vec![id(*index)]
+            }
             _ => Vec::new(),
         }
+    }
+
+    /// Whether the widget should send [`Pointer::Hover`] events.
+    pub fn wants_hover(&self) -> bool {
+        self.multi.is_some()
     }
 
     /// Tells the editor the canvas zoom, which scales hit tolerances.
@@ -163,21 +232,38 @@ impl Editor {
     /// Whether a press at `at` would grab something to move: an element, or
     /// the current selection when `at` is inside its box.
     pub fn grabs(&self, at: Point) -> bool {
-        self.in_selection(at) || self.hit(at).is_some()
+        self.tool == Tool::Selection && (self.in_selection(at) || self.hit(at).is_some())
     }
 
     /// Handles a primary-button pointer event at a scene point.
     pub fn pointer(&mut self, pointer: Pointer, at: Point, modifiers: Modifiers) {
-        match (pointer, self.tool) {
-            (Pointer::Down, Tool::Selection) => self.press(at, modifiers),
-            (Pointer::Down, Tool::Hand) => {}
-            (Pointer::Move, _) => self.drag(at, modifiers),
-            (Pointer::Up, _) => self.release(),
+        match pointer {
+            Pointer::Down => match self.tool {
+                Tool::Selection => self.select_press(at, modifiers),
+                Tool::Hand => {}
+                _ => self.create_press(at, modifiers),
+            },
+            Pointer::Move | Pointer::Hover if self.multi.is_some() => {
+                self.multi_hover(at, modifiers)
+            }
+            Pointer::Move => {
+                if !self.select_drag(at, modifiers) {
+                    self.create_drag(at, modifiers);
+                }
+            }
+            Pointer::Hover => {}
+            Pointer::Up => {
+                if !self.select_release() {
+                    self.create_release(at);
+                }
+            }
         }
     }
 
-    /// Runs a keyboard command.
+    /// Runs a keyboard command. Any command first finishes a multi-point
+    /// line or arrow in progress.
     pub fn command(&mut self, command: Command) {
+        self.finish_multi();
         match command {
             Command::Tool(tool) => {
                 self.tool = tool;
@@ -185,6 +271,14 @@ impl Editor {
                     self.selected.clear();
                 }
             }
+            Command::ToggleLock => {
+                self.locked = !self.locked;
+                if !self.locked {
+                    self.tool = Tool::Selection;
+                }
+            }
+            Command::Escape => self.tool = Tool::Selection,
+            Command::Finish => {}
             Command::Delete => self.delete(),
             Command::Duplicate => self.duplicate(),
             Command::SelectAll => {
@@ -222,119 +316,6 @@ impl Editor {
         hit::element_at(&self.scene, at, self.threshold())
     }
 
-    /// Whether `at` is inside the selection's box, padded by the threshold:
-    /// the element's rotated box for one, the common box for several.
-    fn in_selection(&self, at: Point) -> bool {
-        let pad = self.threshold();
-        let selected: Vec<&Element> = self.selection().collect();
-        match selected[..] {
-            [] => false,
-            [one] => hit::in_box(one, at, pad),
-            _ => {
-                let [x1, y1, x2, y2] = common_bounds(selected.into_iter());
-                at[0] >= x1 - pad && at[0] <= x2 + pad && at[1] >= y1 - pad && at[1] <= y2 + pad
-            }
-        }
-    }
-
-    fn press(&mut self, at: Point, modifiers: Modifiers) {
-        let hit = self.hit(at).map(|e| e.base.id.clone());
-        let grab_selection = !modifiers.shift && self.in_selection(at);
-        let clicked = match hit {
-            Some(id) if modifiers.shift && self.selected.contains(&id) => {
-                self.selected.remove(&id);
-                return;
-            }
-            _ if grab_selection => hit.filter(|id| self.selected.contains(id)),
-            Some(id) => {
-                if !modifiers.shift {
-                    self.selected.clear();
-                }
-                self.selected.insert(id);
-                None
-            }
-            None => {
-                if !modifiers.shift {
-                    self.selected.clear();
-                }
-                let keep = self.selected.clone();
-                self.gesture = Some(Gesture::Marquee {
-                    from: at,
-                    to: at,
-                    keep,
-                });
-                return;
-            }
-        };
-        self.gesture = Some(Gesture::Move {
-            from: at,
-            before: self.scene.elements.clone(),
-            starts: self.moving(),
-            moved: false,
-            clicked,
-        });
-    }
-
-    fn drag(&mut self, at: Point, modifiers: Modifiers) {
-        match &mut self.gesture {
-            Some(Gesture::Move {
-                from,
-                starts,
-                moved,
-                ..
-            }) => {
-                let mut offset = [at[0] - from[0], at[1] - from[1]];
-                if modifiers.shift {
-                    // Lock to the dominant axis.
-                    let axis = usize::from(offset[1].abs() < offset[0].abs());
-                    offset[axis] = 0.0;
-                }
-                if offset == [0.0, 0.0] && !*moved {
-                    return;
-                }
-                *moved = true;
-                let targets: Vec<(usize, Point)> = starts
-                    .iter()
-                    .map(|&(i, [x, y])| (i, [x + offset[0], y + offset[1]]))
-                    .collect();
-                for (i, position) in targets {
-                    self.place(i, position);
-                }
-            }
-            Some(Gesture::Marquee { from, to, keep }) => {
-                *to = at;
-                let [x1, y1, x2, y2] = normalize(*from, *to);
-                let mut selected = keep.clone();
-                let inside = self.scene.elements.iter().filter(|e| {
-                    let [a, b, c, d] = geometry::element_bounds(e);
-                    !e.base.is_deleted
-                        && container_id(e).is_none()
-                        && a >= x1
-                        && b >= y1
-                        && c <= x2
-                        && d <= y2
-                });
-                selected.extend(inside.map(|e| e.base.id.clone()));
-                self.selected = selected;
-            }
-            None => {}
-        }
-    }
-
-    fn release(&mut self) {
-        match self.gesture.take() {
-            Some(Gesture::Move {
-                before,
-                moved: true,
-                ..
-            }) => self.history.record(before),
-            Some(Gesture::Move {
-                clicked: Some(id), ..
-            }) => self.selected = HashSet::from([id]),
-            _ => {}
-        }
-    }
-
     fn place(&mut self, index: usize, [x, y]: Point) {
         let element = &mut self.scene.elements[index];
         if (element.base.x, element.base.y) != (x, y) {
@@ -342,96 +323,6 @@ impl Editor {
             element.base.y = y;
             element.touch();
         }
-    }
-
-    fn delete(&mut self) {
-        if self.selected.is_empty() {
-            return;
-        }
-        self.history.record(self.scene.elements.clone());
-        let doomed: HashSet<String> = self
-            .moving()
-            .into_iter()
-            .map(|(i, _)| {
-                let element = &mut self.scene.elements[i];
-                element.base.is_deleted = true;
-                element.touch();
-                element.base.id.clone()
-            })
-            .collect();
-        for element in self
-            .scene
-            .elements
-            .iter_mut()
-            .filter(|e| !e.base.is_deleted)
-        {
-            if element.forget_bindings(&doomed) {
-                element.touch();
-            }
-        }
-        self.selected.clear();
-        self.tool = Tool::Selection;
-    }
-
-    /// Duplicates the selection with its labels. Each copy goes right after
-    /// its original, or after the container and label pair, and the copies
-    /// become the selection.
-    fn duplicate(&mut self) {
-        if self.selected.is_empty() {
-            return;
-        }
-        self.history.record(self.scene.elements.clone());
-        let originals: Vec<usize> = self.moving().into_iter().map(|(i, _)| i).collect();
-        let new_ids: HashMap<String, String> = originals
-            .iter()
-            .map(|&i| (self.scene.elements[i].base.id.clone(), crate::random::id()))
-            .collect();
-
-        // A unit is a top-level element plus its labels; its copies follow
-        // the unit's last member.
-        let mut units: HashMap<&str, (usize, Vec<usize>)> = HashMap::new();
-        for &i in &originals {
-            let element = &self.scene.elements[i];
-            let unit = container_id(element).unwrap_or(&element.base.id);
-            let entry = units.entry(unit).or_insert((i, Vec::new()));
-            entry.0 = entry.0.max(i);
-            entry.1.push(i);
-        }
-        let mut inserts: Vec<(usize, Vec<Element>)> = units
-            .into_values()
-            .map(|(last, members)| {
-                let copies = members.iter().map(|&i| self.copy_of(i, &new_ids)).collect();
-                (last, copies)
-            })
-            .collect();
-        inserts.sort_by_key(|(last, _)| std::cmp::Reverse(*last));
-
-        self.selected.clear();
-        for (last, copies) in inserts {
-            for copy in copies.iter().filter(|c| container_id(c).is_none()) {
-                self.selected.insert(copy.base.id.clone());
-            }
-            self.scene.elements.splice(last + 1..last + 1, copies);
-        }
-    }
-
-    fn copy_of(&self, index: usize, new_ids: &HashMap<String, String>) -> Element {
-        let original = &self.scene.elements[index];
-        let mut copy = original.duplicate();
-        copy.base.id = new_ids[&original.base.id].clone();
-        copy.base.x += DUPLICATE_OFFSET;
-        copy.base.y += DUPLICATE_OFFSET;
-        if let Kind::Text(text) = &mut copy.kind
-            && let Some(container) = &mut text.container_id
-            && let Some(new) = new_ids.get(container)
-        {
-            *container = new.clone();
-        }
-        if let Some(bound) = &mut copy.base.bound_elements {
-            bound.retain(|b| new_ids.contains_key(&b.id));
-            bound.iter_mut().for_each(|b| b.id = new_ids[&b.id].clone());
-        }
-        copy
     }
 
     /// Selected elements plus their labels, with their current positions.
