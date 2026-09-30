@@ -116,7 +116,7 @@ impl Sketch {
     }
 
     pub(super) fn draw_overlay(&self, frame: &mut Frame, zoom: f64, view: Affine) {
-        if let Some(shape) = self.editor.binding_suggestion() {
+        for shape in self.editor.binding_suggestions() {
             self.draw_binding_highlight(frame, shape, zoom, view);
         }
         let (selection, dark_selection) = (

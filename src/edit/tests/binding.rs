@@ -147,13 +147,26 @@ fn bound_ends_match_excalidraw_on_real_sketches() {
 }
 
 #[test]
-fn drawing_an_arrow_suggests_the_shape_under_its_moving_end() {
+fn arrow_tool_drawing_and_moving_suggest_binding_targets() {
     let mut editor = Editor::new(Scene::default());
     editor.command(Command::Tool(Tool::Rectangle));
     drag(&mut editor, [0.0, 0.0], [100.0, 100.0]);
     let rect = editor.scene().elements[0].base.id.clone();
-    let suggested = |editor: &Editor| editor.binding_suggestion().map(|e| e.base.id.clone());
+    let suggested = |editor: &Editor| {
+        let shapes = editor.binding_suggestions();
+        assert!(shapes.len() <= 1);
+        shapes.first().map(|e| e.base.id.clone())
+    };
     editor.command(Command::Tool(Tool::Arrow));
+    assert!(editor.wants_hover());
+    editor.pointer(Pointer::Hover, [104.0, 50.0], NONE);
+    assert_eq!(
+        suggested(&editor),
+        Some(rect.clone()),
+        "hovering with the arrow tool"
+    );
+    editor.pointer(Pointer::Hover, [-100.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), None);
     editor.pointer(Pointer::Down, [-100.0, 50.0], NONE);
     assert_eq!(suggested(&editor), None, "not dragged yet");
     editor.pointer(Pointer::Move, [-5.0, 50.0], NONE);
@@ -166,6 +179,14 @@ fn drawing_an_arrow_suggests_the_shape_under_its_moving_end() {
     let arrow = &editor.scene().elements[1];
     assert_eq!(
         arrow.binding(ArrowEnd::End).map(|b| b.element_id),
-        Some(rect)
+        Some(rect.clone())
     );
+
+    // Moving the arrow suggests its shape while the end stays close.
+    editor.pointer(Pointer::Down, [-50.0, 50.0], NONE);
+    editor.pointer(Pointer::Move, [-49.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), Some(rect));
+    editor.pointer(Pointer::Move, [-150.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), None);
+    editor.pointer(Pointer::Up, [-150.0, 50.0], NONE);
 }

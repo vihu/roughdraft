@@ -33,13 +33,16 @@ enum Outline {
 
 // Public API
 impl Editor {
-    /// Returns the shape the moving end of the arrow being drawn or dragged
-    /// would bind to, for Excalidraw's binding highlight.
-    // ponytail: only the end under the pointer; Excalidraw also highlights
-    // under the arrow tool before a press and while moving bound arrows.
-    pub fn binding_suggestion(&self) -> Option<&Element> {
-        let (index, end) = match (&self.gesture, &self.multi) {
-            (_, Some(multi)) => (multi.index, ArrowEnd::End),
+    /// Returns the shapes to highlight as binding targets
+    /// (`suggestedBindings`): under the arrow tool before a press, at the
+    /// moving end of an arrow being drawn or dragged by an end, and at the
+    /// ends of arrows being moved.
+    pub fn binding_suggestions(&self) -> Vec<&Element> {
+        /// `getSuggestedBindingsForArrows` gives up above this many.
+        const MOVING_LIMIT: usize = 50;
+
+        let ends: Vec<(usize, ArrowEnd)> = match (&self.gesture, &self.multi) {
+            (_, Some(multi)) => vec![(multi.index, ArrowEnd::End)],
             (
                 Some(Gesture::Line {
                     index,
@@ -47,17 +50,44 @@ impl Editor {
                     ..
                 }),
                 _,
-            ) => (*index, ArrowEnd::End),
+            ) => vec![(*index, ArrowEnd::End)],
             (
                 Some(Gesture::Endpoint {
                     index, which: 0, ..
                 }),
                 _,
-            ) => (*index, ArrowEnd::Start),
-            (Some(Gesture::Endpoint { index, .. }), _) => (*index, ArrowEnd::End),
-            _ => return None,
+            ) => vec![(*index, ArrowEnd::Start)],
+            (Some(Gesture::Endpoint { index, .. }), _) => vec![(*index, ArrowEnd::End)],
+            (
+                Some(Gesture::Move {
+                    starts,
+                    moved: true,
+                    ..
+                }),
+                _,
+            ) if starts.len() <= MOVING_LIMIT => starts
+                .iter()
+                .flat_map(|(index, _)| [(*index, ArrowEnd::Start), (*index, ArrowEnd::End)])
+                .collect(),
+            (None, None) if self.tool == super::Tool::Arrow => {
+                return self
+                    .hover
+                    .and_then(|at| self.bindable_near(at, |_| false))
+                    .into_iter()
+                    .collect();
+            }
+            _ => Vec::new(),
         };
-        self.binding_target(index, end)
+        let mut shapes: Vec<&Element> = Vec::new();
+        for (index, end) in ends {
+            if let Some(shape) = self.binding_target(index, end)
+                && !self.selected.contains(&shape.base.id)
+                && !shapes.iter().any(|s| s.base.id == shape.base.id)
+            {
+                shapes.push(shape);
+            }
+        }
+        shapes
     }
 }
 
@@ -86,14 +116,22 @@ impl Editor {
         let edge = points[end_index(end, points.len())];
         let other = arrow.binding(opposite(end)).map(|b| b.element_id);
         let simple = points.len() < 3;
+        self.bindable_near(edge, |e| {
+            e.base.id == arrow.base.id
+                // Don't bind both ends of a simple segment to one shape.
+                || (simple && other.as_deref() == Some(e.base.id.as_str()))
+        })
+    }
+
+    /// The topmost bindable shape within binding distance of `point`, other
+    /// than those `skip` rules out.
+    fn bindable_near(&self, point: Point, skip: impl Fn(&Element) -> bool) -> Option<&Element> {
         self.scene
             .elements
             .iter()
             .rev()
-            .filter(|e| is_bindable(e) && e.base.id != arrow.base.id)
-            // Don't bind both ends of a simple segment to one shape.
-            .filter(|e| !(simple && other.as_deref() == Some(e.base.id.as_str())))
-            .find(|e| distance_to_outline(e, edge) <= max_binding_gap(e, self.zoom))
+            .filter(|e| is_bindable(e) && !skip(e))
+            .find(|e| distance_to_outline(e, point) <= max_binding_gap(e, self.zoom))
     }
 
     /// Moves arrow ends bound to any element in `changed`, so they keep

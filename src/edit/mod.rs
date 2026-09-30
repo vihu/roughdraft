@@ -43,6 +43,9 @@ pub struct Editor {
     editing_group: Option<String>,
     history: History,
     zoom: f64,
+    /// Last pointer position without a button down, for the arrow tool's
+    /// binding highlight.
+    hover: Option<Point>,
 }
 
 /// What a pointer press on the canvas does.
@@ -201,6 +204,7 @@ impl Editor {
             editing_group: None,
             history: History::default(),
             zoom: 1.0,
+            hover: None,
         }
     }
 
@@ -287,7 +291,7 @@ impl Editor {
 
     /// Whether the widget should send [`Pointer::Hover`] events.
     pub fn wants_hover(&self) -> bool {
-        self.multi.is_some()
+        self.multi.is_some() || self.tool == Tool::Arrow
     }
 
     /// Tells the editor the canvas zoom, which scales hit tolerances.
@@ -322,7 +326,7 @@ impl Editor {
                     || self.drag_handle(at, modifiers)
                     || self.create_drag(at, modifiers);
             }
-            Pointer::Hover => {}
+            Pointer::Hover => self.hover = Some(at),
             Pointer::Up => {
                 if !self.select_release() {
                     self.create_release(at);
