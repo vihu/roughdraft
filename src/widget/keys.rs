@@ -1,7 +1,7 @@
 //! Excalidraw's keyboard shortcuts as editor commands.
 use iced::keyboard::{self, Key, key::Named};
 
-use crate::edit::{Command, Order, Tool};
+use crate::edit::{Axis, Command, Order, Tool};
 
 /// Shortcuts Excalidraw matches by key code, so they work whatever Alt
 /// makes of the letter: copy and paste styles.
@@ -54,6 +54,8 @@ pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Comm
             ("]", true) => Some(Command::Reorder(Order::Forward)),
             (_, true) => None,
             _ if alt => None,
+            ("h", _) if shift => Some(Command::Flip(Axis::Horizontal)),
+            ("v", _) if shift => Some(Command::Flip(Axis::Vertical)),
             ("v" | "1", _) => Some(Command::Tool(Tool::Selection)),
             ("h", _) => Some(Command::Tool(Tool::Hand)),
             ("r" | "2", _) => Some(Command::Tool(Tool::Rectangle)),
@@ -116,6 +118,10 @@ mod tests {
         assert_eq!(
             shortcut(&key("h"), Modifiers::empty()),
             Some(Command::Tool(Tool::Hand))
+        );
+        assert_eq!(
+            shortcut(&key("H"), Modifiers::SHIFT),
+            Some(Command::Flip(crate::edit::Axis::Horizontal))
         );
         assert_eq!(
             shortcut(&key("d"), Modifiers::ALT | Modifiers::SHIFT),

@@ -8,6 +8,7 @@ mod clipboard;
 mod commands;
 mod create;
 mod eraser;
+mod flip;
 mod group;
 mod line;
 mod order;
@@ -20,6 +21,7 @@ mod transform;
 
 use std::collections::HashSet;
 
+pub use self::flip::Axis;
 pub use self::order::Order;
 pub use self::style::{Style, StyleChange};
 pub use self::text::{ApproxMeasure, Measure};
@@ -145,6 +147,8 @@ pub enum Command {
     CopyStyles,
     /// Applies the remembered style to the selection (Ctrl+Alt+V).
     PasteStyles,
+    /// Mirrors the selection (Shift+H, Shift+V).
+    Flip(Axis),
 }
 
 #[derive(Debug)]
@@ -394,6 +398,7 @@ impl Editor {
             Command::Delete if self.line_edit.is_some() => self.delete_line_points(),
             Command::EditLine => self.enter_line_editor(),
             Command::CopyStyles => self.copy_styles(),
+            Command::Flip(axis) => self.flip(axis),
             Command::PasteStyles => self.paste_styles(),
             Command::Tool(tool) => {
                 self.tool = tool;

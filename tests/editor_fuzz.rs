@@ -4,7 +4,7 @@
 //! Seeded, so a failure replays from the seed and step in its message.
 use std::collections::HashSet;
 
-use roughdraft::edit::{Command, Editor, Modifiers, Order, Pointer, StyleChange, Tool};
+use roughdraft::edit::{Axis, Command, Editor, Modifiers, Order, Pointer, StyleChange, Tool};
 use roughdraft::scene::{ArrowEnd, Arrowhead, FillStyle, Kind, Scene, StrokeStyle, TextAlign};
 
 /// Sessions, steps per session, and how often the scene is also saved,
@@ -98,6 +98,8 @@ fn session(seed: u64) {
                 Command::EditLine,
                 Command::CopyStyles,
                 Command::PasteStyles,
+                Command::Flip(Axis::Horizontal),
+                Command::Flip(Axis::Vertical),
                 Command::ToggleLock,
                 Command::Escape,
                 Command::Finish,

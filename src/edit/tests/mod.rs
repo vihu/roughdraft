@@ -279,3 +279,71 @@ fn eraser_drag_marks_then_deletes_with_labels_and_alt_unmarks() {
     );
     assert!(deleted(&editor, "b") && deleted(&editor, "t"));
 }
+
+#[test]
+fn flip_mirrors_the_selection_and_bound_arrows_swap_heads() {
+    use crate::edit::Axis;
+    let mut editor = editor();
+    drag(
+        &mut editor,
+        [50.0, 25.0],
+        [50.0, 25.0],
+        Modifiers::default(),
+    );
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], SHIFT);
+    // a (0..100) and b (200..300) swap sides about x 150; b's label (as wide
+    // as b) follows.
+    editor.command(Command::Flip(Axis::Horizontal));
+    assert_eq!(
+        (x(&editor, "a"), x(&editor, "b"), x(&editor, "t")),
+        (200.0, 0.0, 0.0)
+    );
+    editor.command(Command::Flip(Axis::Horizontal));
+    assert_eq!(
+        (x(&editor, "a"), x(&editor, "b")),
+        (0.0, 200.0),
+        "twice is the identity"
+    );
+    editor.command(Command::Undo);
+    assert_eq!(x(&editor, "a"), 200.0);
+
+    // A lone bound arrow keeps its place and swaps its heads.
+    let mut editor = crate::edit::tests::editor();
+    drag(
+        &mut editor,
+        [150.0, 0.0],
+        [150.0, 0.0],
+        Modifiers::default(),
+    );
+    assert!(editor.is_selected("r"));
+    editor.apply_style(crate::edit::StyleChange::EndArrowhead(Some(
+        crate::scene::Arrowhead::Arrow,
+    )));
+    let before = x(&editor, "r");
+    editor.command(Command::Flip(Axis::Vertical));
+    assert_eq!(x(&editor, "r"), before);
+    let json = serde_json::to_value(&editor.scene().elements[3]).unwrap();
+    assert_eq!(
+        (json["startArrowhead"].clone(), json["endArrowhead"].clone()),
+        (serde_json::json!("arrow"), serde_json::Value::Null)
+    );
+
+    // Lines mirror their points.
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(crate::edit::Tool::Line));
+    for at in [[0.0, 0.0], [100.0, 50.0], [200.0, 0.0], [200.0, 0.0]] {
+        editor.pointer(Pointer::Hover, at, Modifiers::default());
+        editor.pointer(Pointer::Down, at, Modifiers::default());
+        editor.pointer(Pointer::Up, at, Modifiers::default());
+    }
+    editor.command(Command::Flip(Axis::Vertical));
+    let Kind::Line(line) = &editor.scene().elements[0].kind else {
+        panic!("line")
+    };
+    assert_eq!(line.points, [[0.0, 0.0], [100.0, -50.0], [200.0, 0.0]]);
+    assert_eq!(
+        editor.scene().elements[0].base.y,
+        50.0,
+        "the box stays in place"
+    );
+}
