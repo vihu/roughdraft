@@ -10,11 +10,19 @@ impl TryFrom<Map<String, Value>> for Scene {
     type Error = serde_json::Error;
 
     fn try_from(mut json: Map<String, Value>) -> Result<Self, Self::Error> {
-        // `take` leaves `null` in place so the key keeps its position.
-        let elements = match json.get_mut("elements") {
-            Some(elements) => Vec::deserialize(elements.take())?,
-            None => Vec::new(),
+        // `take` leaves `null` in place so the key keeps its position;
+        // `elements: null` is an empty scene, like `restoreElements`.
+        let mut elements: Vec<Element> = match json.get_mut("elements") {
+            Some(elements) if !elements.is_null() => Vec::deserialize(elements.take())?,
+            _ => Vec::new(),
         };
+        // A repeated id gets a new one (`restoreElements`), so ids stay unique.
+        let mut seen = std::collections::HashSet::new();
+        for element in &mut elements {
+            while !seen.insert(element.base.id.clone()) {
+                element.base.id = crate::random::id();
+            }
+        }
         Ok(Self { elements, json })
     }
 }

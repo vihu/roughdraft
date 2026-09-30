@@ -147,3 +147,17 @@ fn old_arrows_without_arrowhead_keys_point_at_their_end() {
         (&None, &Some(Arrowhead::Arrow))
     );
 }
+
+#[test]
+fn repeated_ids_get_new_ones_and_null_elements_load_empty() {
+    // `restoreElements`: ids stay unique, and `elements: null` is no scene
+    // error.
+    let json = format!(
+        r#"{{"type":"excalidraw","elements":[{{"id":"r","type":"rectangle",{BASE}}},{{"id":"r","type":"rectangle",{BASE}}}]}}"#
+    );
+    let scene: Scene = serde_json::from_str(&json).unwrap();
+    assert_eq!(scene.elements[0].base.id, "r");
+    assert_ne!(scene.elements[1].base.id, "r");
+    let empty: Scene = serde_json::from_str(r#"{"type":"excalidraw","elements":null}"#).unwrap();
+    assert!(empty.elements.is_empty());
+}
