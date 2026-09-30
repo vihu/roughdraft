@@ -56,6 +56,9 @@ pub struct Editor {
     line_edit: Option<line::LineEdit>,
     /// Element and label whose style Ctrl+Alt+V applies.
     copied_style: Option<(Element, Option<Element>)>,
+    /// The elements before a style change being dragged
+    /// ([`Editor::preview_style`]), recorded when it ends.
+    style_preview: Option<Vec<Element>>,
 }
 
 /// What a pointer press on the canvas does.
@@ -265,6 +268,7 @@ impl Editor {
             hover: None,
             line_edit: None,
             copied_style: None,
+            style_preview: None,
         }
     }
 
@@ -373,6 +377,7 @@ impl Editor {
     pub fn pointer(&mut self, pointer: Pointer, at: Point, modifiers: Modifiers) {
         match pointer {
             Pointer::Down => {
+                self.commit_style();
                 // A click anywhere ends text editing first.
                 self.finish_text();
                 match self.tool {

@@ -19,6 +19,7 @@ impl Editor {
     /// gesture in progress (the scene goes back to where it started) and
     /// finishes a multi-point line or arrow in progress.
     pub fn command(&mut self, command: Command) {
+        self.commit_style();
         self.cancel_gesture();
         self.finish_text();
         let drawing = self.multi.is_some();
@@ -136,6 +137,7 @@ impl Editor {
     /// (paste, cut, inserting an image): no gesture, no text being typed,
     /// no line being drawn, and the line editor closed.
     pub(super) fn settle(&mut self) {
+        self.commit_style();
         self.cancel_gesture();
         self.finish_text();
         self.finish_multi();

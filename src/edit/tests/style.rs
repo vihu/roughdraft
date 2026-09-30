@@ -153,3 +153,25 @@ fn arrow_type_curves_arrows_and_edges_leave_them_alone() {
     drag(&mut editor, [0.0, 100.0], [100.0, 100.0], NONE);
     assert_eq!(roundness(&editor, 1), None);
 }
+
+#[test]
+fn a_dragged_style_change_is_one_undo_step() {
+    let mut editor = editor();
+    select_a(&mut editor);
+    let stroke = |editor: &Editor| editor.scene().elements[0].base.stroke_color.clone();
+    for color in ["#111111", "#222222", "#333333"] {
+        editor.preview_style(StyleChange::StrokeColor(color.into()));
+    }
+    assert_eq!(stroke(&editor), "#333333");
+    editor.commit_style();
+    editor.command(Command::Undo);
+    assert_eq!(stroke(&editor), "#1e1e1e", "one step back to the start");
+    // Anything else the editor does ends a drag first: here a new change.
+    editor.command(Command::Redo);
+    editor.preview_style(StyleChange::Opacity(50.0));
+    editor.apply_style(StyleChange::StrokeColor("#e03131".into()));
+    editor.command(Command::Undo);
+    assert_eq!(editor.scene().elements[0].base.opacity, 50.0);
+    editor.command(Command::Undo);
+    assert_eq!(editor.scene().elements[0].base.opacity, 100.0);
+}

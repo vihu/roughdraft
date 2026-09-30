@@ -241,7 +241,8 @@ impl Sketch {
             tool,
             Tool::Rectangle | Tool::Diamond | Tool::Ellipse | Tool::Line | Tool::Freedraw
         );
-        if tool_fills || selected.iter().any(|e| fillable(&e.kind)) {
+        let background = tool_fills || selected.iter().any(|e| fillable(&e.kind));
+        if background {
             sections.push(section(
                 "Background",
                 self.colors(
@@ -406,9 +407,11 @@ impl Sketch {
             });
             sections.push(section("Align", self.icon_choices(aligns)));
         }
+        // One undo step per drag.
         let opacity = slider(0.0..=100.0, style.opacity, |value| {
-            Message(Input::Style(StyleChange::Opacity(value)))
+            Message(Input::StylePreview(StyleChange::Opacity(value)))
         })
+        .on_release(Message(Input::StyleCommit))
         .step(10.0)
         .width(Length::Fixed(CONTENT_WIDTH));
         sections.push(section("Opacity", opacity.into()));
@@ -416,8 +419,27 @@ impl Sketch {
         let panel = container(Column::with_children(sections).spacing(10))
             .padding(12)
             .style(panel_style);
+        // The open picker sits to the panel's right, while its color shows.
+        let picker = self
+            .picker
+            .filter(|p| p.field == ColorField::Stroke || background);
+        let content: Element<'_, Message> = match picker {
+            Some(picker) => {
+                let current = match picker.field {
+                    ColorField::Stroke => &style.stroke_color,
+                    ColorField::Background => &style.background_color,
+                };
+                row![
+                    opaque(self.themed(panel)),
+                    opaque(self.themed(self.picker_view(picker, current)))
+                ]
+                .spacing(8)
+                .into()
+            }
+            None => opaque(self.themed(panel)),
+        };
         Some(
-            container(opaque(self.themed(panel)))
+            container(content)
                 .padding(iced::Padding {
                     top: 76.0,
                     left: 12.0,
@@ -474,9 +496,12 @@ impl Sketch {
             .size(12)
             .padding([2, 6])
             .width(Length::Fixed(90.0));
-        column![swatches(picks, current, move |css| field.change(css)), hex]
-            .spacing(4)
-            .into()
+        let picks = row![
+            swatches(picks, current, move |css| field.change(css)),
+            self.ring_swatch(field, current)
+        ]
+        .spacing(4);
+        column![picks, hex].spacing(4).into()
     }
 }
 

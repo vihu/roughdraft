@@ -1,7 +1,7 @@
 //! Style panel changes applied to the selection (`actions/actionProperties.tsx`).
 use super::{Editor, Style, StyleChange};
 use crate::hit::container_id;
-use crate::scene::{Kind, Roundness, TextAlign};
+use crate::scene::{Element, Kind, Roundness, TextAlign};
 
 /// `DEFAULT_FONT_SIZE`.
 const DEFAULT_FONT_SIZE: f64 = 20.0;
@@ -41,6 +41,36 @@ impl Editor {
     /// of selected shapes included), as one undo step. Properties that do
     /// not apply to an element's type are skipped.
     pub fn apply_style(&mut self, change: StyleChange) {
+        self.commit_style();
+        let before = self.restyle(change);
+        if before != self.scene.elements {
+            self.history.record(before);
+        }
+    }
+
+    /// Applies a style change that is still being dragged (the color ring,
+    /// the opacity slider) like [`Editor::apply_style`], but leaves the undo
+    /// step to [`Editor::commit_style`], so a whole drag is one step.
+    pub fn preview_style(&mut self, change: StyleChange) {
+        let before = self.restyle(change);
+        self.style_preview.get_or_insert(before);
+    }
+
+    /// Ends a dragged style change: one undo step for all of it. Anything
+    /// else the editor does ends it too.
+    pub fn commit_style(&mut self) {
+        if let Some(before) = self.style_preview.take()
+            && before != self.scene.elements
+        {
+            self.history.record(before);
+        }
+    }
+}
+
+// Private API
+impl Editor {
+    /// Applies a style change; returns the elements as they were before.
+    fn restyle(&mut self, change: StyleChange) -> Vec<Element> {
         self.finish_text();
         self.style.apply(&change);
         let before = self.scene.elements.clone();
@@ -121,14 +151,9 @@ impl Editor {
                 self.layout_text(index, &original);
             }
         }
-        if before != self.scene.elements {
-            self.history.record(before);
-        }
+        before
     }
-}
 
-// Private API
-impl Editor {
     /// Remembers the style of the first selected element in the stack and
     /// of its label (`actionCopyStyles`).
     pub(super) fn copy_styles(&mut self) {

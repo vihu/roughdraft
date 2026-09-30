@@ -11,6 +11,7 @@ mod layers;
 mod menu;
 mod overlay;
 mod paint;
+mod picker;
 mod picture;
 mod program;
 mod text;
@@ -76,6 +77,10 @@ pub struct Sketch {
     viewport: std::cell::Cell<iced::Size>,
     /// A colour being typed in the style panel, until the next click.
     color_draft: Option<(ui::ColorField, String)>,
+    /// The color picker, while open.
+    picker: Option<picker::Picker>,
+    /// The picker's hue ring, which never changes.
+    ring: canvas::Cache,
     /// Host actions the main menu offers, and whether it is open.
     menu: Vec<Request>,
     menu_open: bool,
@@ -119,6 +124,13 @@ enum Input {
     ZoomKey(ZoomKey),
     /// A change from the style panel.
     Style(edit::StyleChange),
+    /// A change from the style panel that is still being dragged (the
+    /// opacity slider); [`Input::StyleCommit`] ends it.
+    StylePreview(edit::StyleChange),
+    /// The end of a dragged style change: one undo step.
+    StyleCommit,
+    /// Input from the color picker.
+    Pick(picker::Pick),
     /// Text typed into a colour field of the style panel.
     ColorText(ui::ColorField, String),
     /// An edit in the text overlay.
@@ -171,6 +183,8 @@ impl Sketch {
             undecodable: std::collections::HashSet::new(),
             viewport: std::cell::Cell::new(iced::Size::new(800.0, 600.0)),
             color_draft: None,
+            picker: None,
+            ring: canvas::Cache::new(),
             menu: Vec::new(),
             menu_open: false,
         };
@@ -197,9 +211,23 @@ impl Sketch {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         if matches!(
             message.0,
-            Input::Pointer(Pointer::Down, ..) | Input::Command(_) | Input::Style(_)
+            Input::Pointer(Pointer::Down, ..)
+                | Input::Command(_)
+                | Input::Style(_)
+                | Input::StylePreview(_)
+                | Input::Pick(_)
         ) {
             self.color_draft = None;
+        }
+        // A press on the canvas, a command or the menu closes the picker.
+        if matches!(
+            message.0,
+            Input::Pointer(Pointer::Down, ..)
+                | Input::DoubleClick(_)
+                | Input::Command(_)
+                | Input::ToggleMenu
+        ) {
+            self.picker = None;
         }
         // Anything but the menu button closes the menu.
         if !matches!(message.0, Input::ToggleMenu) {
@@ -268,6 +296,19 @@ impl Sketch {
             }
             Input::Style(change) => {
                 self.editor.apply_style(change);
+                self.follow_picker();
+                Task::none()
+            }
+            Input::StylePreview(change) => {
+                self.editor.preview_style(change);
+                Task::none()
+            }
+            Input::StyleCommit => {
+                self.editor.commit_style();
+                Task::none()
+            }
+            Input::Pick(pick) => {
+                self.pick(pick);
                 Task::none()
             }
             Input::ColorText(field, text) => {
@@ -280,6 +321,7 @@ impl Sketch {
                     .find(|css| Rgba::parse(css).is_some());
                 if let Some(css) = css {
                     self.editor.apply_style(field.change(css));
+                    self.follow_picker();
                 }
                 self.color_draft = Some((field, text));
                 Task::none()
