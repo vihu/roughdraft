@@ -264,7 +264,7 @@ impl Editor {
 
     /// Replaces a line's points; width and height follow, like
     /// `mutateElement` does.
-    fn set_points(&mut self, index: usize, points: Vec<Point>) {
+    pub(super) fn set_points(&mut self, index: usize, points: Vec<Point>) {
         let element = &mut self.scene.elements[index];
         let (xs, ys): (Vec<f64>, Vec<f64>) = points.iter().map(|[x, y]| (*x, *y)).unzip();
         let span = |v: &[f64]| {
@@ -296,7 +296,7 @@ fn distance(a: Point, b: Point) -> f64 {
 
 /// `getLockedLinearCursorAlignSize`: with Shift, snaps the direction to
 /// 15-degree steps, keeping the horizontal distance.
-fn lock_angle([dx, dy]: Point, shift: bool) -> Point {
+pub(super) fn lock_angle([dx, dy]: Point, shift: bool) -> Point {
     if !shift {
         return [dx, dy];
     }

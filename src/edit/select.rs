@@ -24,6 +24,9 @@ impl Editor {
     }
 
     pub(super) fn select_press(&mut self, at: Point, modifiers: Modifiers) {
+        if self.press_handle(at) {
+            return;
+        }
         let hit = self.hit(at).map(|e| e.base.id.clone());
         let grab_selection = !modifiers.shift && self.in_selection(at);
         let clicked = match hit {
@@ -122,6 +125,15 @@ impl Editor {
                 clicked: Some(id), ..
             }) => self.selected = HashSet::from([id]),
             Some(Gesture::Move { .. } | Gesture::Marquee { .. }) => {}
+            Some(
+                Gesture::Resize { before, .. }
+                | Gesture::Rotate { before, .. }
+                | Gesture::Endpoint { before, .. },
+            ) => {
+                if before != self.scene.elements {
+                    self.history.record(before);
+                }
+            }
             other => {
                 self.gesture = other;
                 return false;

@@ -6,12 +6,15 @@
 mod clipboard;
 mod commands;
 mod create;
+mod resize;
 mod select;
 mod style;
+mod transform;
 
 use std::collections::HashSet;
 
 pub use self::style::Style;
+pub use self::transform::{HANDLE_SIZE, Handle, Handles, POINT_RADIUS};
 use crate::geometry::{self, Bounds, Point};
 use crate::history::History;
 use crate::hit::{self, container_id};
@@ -131,6 +134,26 @@ enum Gesture {
         before: Vec<Element>,
         dragged: bool,
     },
+    /// Dragging a resize handle; `start` holds the elements as pressed.
+    Resize {
+        handle: Handle,
+        before: Vec<Element>,
+        start: Vec<(usize, Element)>,
+        frame: transform::Frame,
+        offset: Point,
+    },
+    /// Dragging the rotation knob around `center`.
+    Rotate {
+        before: Vec<Element>,
+        start: Vec<(usize, Element)>,
+        center: Point,
+    },
+    /// Dragging one end of a 2-point line or arrow.
+    Endpoint {
+        index: usize,
+        which: usize,
+        before: Vec<Element>,
+    },
 }
 
 /// A line or arrow being drawn click by click; its last point follows the
@@ -213,8 +236,16 @@ impl Editor {
                 }),
                 _,
             ) => starts.iter().map(|(i, _)| id(*i)).collect(),
-            (Some(Gesture::Shape { index, .. } | Gesture::Line { index, .. }), _) => {
-                vec![id(*index)]
+            (
+                Some(
+                    Gesture::Shape { index, .. }
+                    | Gesture::Line { index, .. }
+                    | Gesture::Endpoint { index, .. },
+                ),
+                _,
+            ) => vec![id(*index)],
+            (Some(Gesture::Resize { start, .. } | Gesture::Rotate { start, .. }), _) => {
+                start.iter().map(|(i, _)| id(*i)).collect()
             }
             _ => Vec::new(),
         }
@@ -248,9 +279,9 @@ impl Editor {
                 self.multi_hover(at, modifiers)
             }
             Pointer::Move => {
-                if !self.select_drag(at, modifiers) {
-                    self.create_drag(at, modifiers);
-                }
+                let _ = self.select_drag(at, modifiers)
+                    || self.drag_handle(at, modifiers)
+                    || self.create_drag(at, modifiers);
             }
             Pointer::Hover => {}
             Pointer::Up => {

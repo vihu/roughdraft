@@ -232,6 +232,50 @@ impl Sketch {
         }
     }
 
+    /// Corner handles as white squares, the rotation knob as a circle, and
+    /// line endpoints as circles, all at a fixed screen size.
+    fn draw_handles(&self, frame: &mut Frame, handles: &edit::Handles, view: Affine, color: Color) {
+        let white = self.paint(Rgba::WHITE);
+        let stroke = Stroke {
+            style: Style::Solid(color),
+            width: 1.0,
+            ..Stroke::default()
+        };
+        let half = edit::HANDLE_SIZE / 2.0;
+        let rotation = Affine::rotate_about(handles.angle, [0.0, 0.0]);
+        for (handle, center) in &handles.handles {
+            let [cx, cy] = view.apply(*center);
+            let path = if *handle == edit::Handle::Rotation {
+                Path::circle(iced::Point::new(cx as f32, cy as f32), half as f32)
+            } else {
+                let corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
+                polygon(&corners, rotation.then(Affine::translate([cx, cy])))
+            };
+            frame.fill(&path, white);
+            frame.stroke(&path, stroke);
+        }
+        let point_stroke = self.paint(Rgba::rgb(
+            0x5e as f32 / 255.0,
+            0x5a as f32 / 255.0,
+            0xd8 as f32 / 255.0,
+        ));
+        for point in &handles.points {
+            let [x, y] = view.apply(*point);
+            let circle = Path::circle(
+                iced::Point::new(x as f32, y as f32),
+                edit::POINT_RADIUS as f32,
+            );
+            frame.fill(&circle, Color { a: 0.9, ..white });
+            frame.stroke(
+                &circle,
+                Stroke {
+                    style: Style::Solid(point_stroke),
+                    ..stroke
+                },
+            );
+        }
+    }
+
     fn draw_overlay(&self, frame: &mut Frame, zoom: f64, view: Affine) {
         let (selection, dark_selection) = (
             Rgba::rgb(0.412, 0.396, 0.859),
@@ -253,7 +297,10 @@ impl Sketch {
         let pad = SELECTION_PADDING / zoom;
 
         let selected: Vec<_> = self.editor.selection().collect();
-        for element in &selected {
+        let handles = self.editor.handles();
+        // A lone 2-point line shows only its endpoint handles, no border.
+        let bordered = !handles.as_ref().is_some_and(|h| !h.points.is_empty());
+        for element in selected.iter().filter(|_| bordered) {
             let [x1, y1, x2, y2] = geometry::local_bounds(element);
             let corners = [
                 [x1 - pad, y1 - pad],
@@ -273,6 +320,9 @@ impl Sketch {
                 [x1 - pad, y2 + pad],
             ];
             frame.stroke(&polygon(&corners, view), line(&[2.0, 2.0]));
+        }
+        if let Some(handles) = &handles {
+            self.draw_handles(frame, handles, view, color);
         }
         if let Some([x1, y1, x2, y2]) = self.editor.marquee() {
             let marquee = polygon(&[[x1, y1], [x2, y1], [x2, y2], [x1, y2]], view);

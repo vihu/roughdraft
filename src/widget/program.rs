@@ -8,7 +8,7 @@ use iced::widget::canvas::{self, Event, Frame, Geometry};
 use iced::{Point, Rectangle, Renderer, Theme};
 
 use super::{Input, Message, Sketch, shortcut};
-use crate::edit::{self, Pointer, Tool};
+use crate::edit::{self, Handle, Pointer, Tool};
 use crate::geometry::{self, Affine};
 
 /// Pan, zoom and input state of the canvas.
@@ -264,6 +264,16 @@ impl canvas::Program<Message> for Sketch {
         }
         if !matches!(self.editor.tool(), Tool::Selection) {
             return mouse::Interaction::Crosshair;
+        }
+        let at = camera.scene_point(self, bounds, position);
+        if let Some(handle) = self.editor.handle_at(at) {
+            return match handle {
+                Handle::N | Handle::S => mouse::Interaction::ResizingVertically,
+                Handle::W | Handle::E => mouse::Interaction::ResizingHorizontally,
+                Handle::Nw | Handle::Se => mouse::Interaction::ResizingDiagonallyDown,
+                Handle::Ne | Handle::Sw => mouse::Interaction::ResizingDiagonallyUp,
+                Handle::Rotation => mouse::Interaction::Grab,
+            };
         }
         if self
             .editor
