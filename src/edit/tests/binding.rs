@@ -145,3 +145,27 @@ fn bound_ends_match_excalidraw_on_real_sketches() {
         "only {exact} of {checked} bound ends reproduce"
     );
 }
+
+#[test]
+fn drawing_an_arrow_suggests_the_shape_under_its_moving_end() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Rectangle));
+    drag(&mut editor, [0.0, 0.0], [100.0, 100.0]);
+    let rect = editor.scene().elements[0].base.id.clone();
+    let suggested = |editor: &Editor| editor.binding_suggestion().map(|e| e.base.id.clone());
+    editor.command(Command::Tool(Tool::Arrow));
+    editor.pointer(Pointer::Down, [-100.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), None, "not dragged yet");
+    editor.pointer(Pointer::Move, [-5.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), Some(rect.clone()));
+    editor.pointer(Pointer::Move, [-60.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), None);
+    editor.pointer(Pointer::Move, [-5.0, 50.0], NONE);
+    editor.pointer(Pointer::Up, [-5.0, 50.0], NONE);
+    assert_eq!(suggested(&editor), None, "gone once drawn");
+    let arrow = &editor.scene().elements[1];
+    assert_eq!(
+        arrow.binding(ArrowEnd::End).map(|b| b.element_id),
+        Some(rect)
+    );
+}

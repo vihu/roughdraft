@@ -11,7 +11,8 @@ use crate::scene::Element;
 
 impl Editor {
     /// Groups the selection (two or more elements) under a new outermost
-    /// group, as one undo step.
+    /// group, as one undo step. The members keep their order but move up to
+    /// the topmost one, so the group is contiguous in the stack.
     pub fn group(&mut self) {
         let targets = self.moving();
         let top_level = targets
@@ -19,6 +20,14 @@ impl Editor {
             .filter(|(i, _)| container_id(&self.scene.elements[*i]).is_none())
             .count();
         if top_level < 2 {
+            return;
+        }
+        // Exactly one whole group selected: it is already a group.
+        if let [(only, _)] = &self.selected_groups()[..]
+            && self
+                .selection()
+                .all(|e| e.group_ids().contains(&only.as_str()))
+        {
             return;
         }
         let before = self.scene.elements.clone();
@@ -36,6 +45,15 @@ impl Editor {
             groups.insert(at, group.clone());
             element.set_group_ids(groups);
             element.touch();
+        }
+        let is_member = |e: &Element| e.group_ids().contains(&group.as_str());
+        if let Some(last) = self.scene.elements.iter().rposition(is_member) {
+            let after = self.scene.elements.split_off(last + 1);
+            let (members, others): (Vec<Element>, Vec<Element>) =
+                std::mem::take(&mut self.scene.elements)
+                    .into_iter()
+                    .partition(is_member);
+            self.scene.elements = others.into_iter().chain(members).chain(after).collect();
         }
         self.history.record(before);
     }

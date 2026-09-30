@@ -3,10 +3,13 @@ use iced::Color;
 use iced::widget::canvas::{Frame, LineDash, Path, Stroke, Style};
 
 use super::{Appearance, SELECTION_PADDING, Sketch, paint};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
+
 use crate::color::Rgba;
 use crate::edit;
 use crate::geometry::{self, Affine};
-use crate::render::Segment;
+use crate::render::{self, Segment};
+use crate::scene::{Element, Kind};
 
 impl Sketch {
     /// Corner handles as white squares, the rotation knob as a circle, and
@@ -53,7 +56,69 @@ impl Sketch {
         }
     }
 
+    /// Excalidraw's binding highlight: a wide, faint outline just outside
+    /// the shape an arrow end would bind to
+    /// (`renderBindingHighlightForBindableElement`).
+    fn draw_binding_highlight(&self, frame: &mut Frame, shape: &Element, zoom: f64, view: Affine) {
+        /// `BINDING_HIGHLIGHT_THICKNESS`.
+        const THICKNESS: f64 = 10.0;
+        /// `BINDING_HIGHLIGHT_OFFSET`.
+        const OFFSET: f64 = 4.0;
+        /// Points per ellipse outline and per rounded corner.
+        const STEPS: usize = 64;
+
+        // Wider in scene units when zoomed out, so it stays visible.
+        let width = THICKNESS / zoom.min(1.0);
+        let pad = width / 2.0 + OFFSET;
+        let [x1, y1, x2, y2] = geometry::local_bounds(shape);
+        let (w, h, cx, cy) = (x2 - x1, y2 - y1, (x1 + x2) / 2.0, (y1 + y2) / 2.0);
+        let outline: Vec<geometry::Point> = match shape.kind {
+            Kind::Diamond if w > 0.0 && h > 0.0 => {
+                let side = w.hypot(h);
+                let (w, h) = (w + 2.0 * pad * side / h, h + 2.0 * pad * side / w);
+                vec![
+                    [cx, cy + h / 2.0],
+                    [cx + w / 2.0, cy],
+                    [cx, cy - h / 2.0],
+                    [cx - w / 2.0, cy],
+                ]
+            }
+            Kind::Ellipse => (0..STEPS)
+                .map(|i| {
+                    let t = TAU * i as f64 / STEPS as f64;
+                    [
+                        cx + (w / 2.0 + pad) * t.cos(),
+                        cy + (h / 2.0 + pad) * t.sin(),
+                    ]
+                })
+                .collect(),
+            _ => {
+                let radius = shape
+                    .base
+                    .roundness
+                    .as_ref()
+                    .map_or(0.0, |r| render::corner_radius(w.min(h), r));
+                rounded_rect([x1 - pad, y1 - pad, x2 + pad, y2 + pad], radius, STEPS / 4)
+            }
+        };
+        let stroke = Stroke {
+            style: Style::Solid(self.paint(Rgba {
+                a: 0.05,
+                ..Rgba::BLACK
+            })),
+            width: (width * zoom) as f32,
+            ..Stroke::default()
+        };
+        frame.stroke(
+            &polygon(&outline, geometry::element_transform(shape).then(view)),
+            stroke,
+        );
+    }
+
     pub(super) fn draw_overlay(&self, frame: &mut Frame, zoom: f64, view: Affine) {
+        if let Some(shape) = self.editor.binding_suggestion() {
+            self.draw_binding_highlight(frame, shape, zoom, view);
+        }
         let (selection, dark_selection) = (
             Rgba::rgb(0.412, 0.396, 0.859),
             Rgba::rgb(0.208, 0.188, 0.769),
@@ -138,6 +203,31 @@ impl Sketch {
             frame.stroke(&marquee, line(&[]));
         }
     }
+}
+
+/// A rectangle's outline with arcs of `radius` (clamped to half the
+/// shorter side) at its corners, `steps` segments each.
+fn rounded_rect(
+    [x1, y1, x2, y2]: geometry::Bounds,
+    radius: f64,
+    steps: usize,
+) -> Vec<geometry::Point> {
+    let r = radius.min((x2 - x1) / 2.0).min((y2 - y1) / 2.0).max(0.0);
+    let corners = [
+        ([x2 - r, y1 + r], -FRAC_PI_2),
+        ([x2 - r, y2 - r], 0.0),
+        ([x1 + r, y2 - r], FRAC_PI_2),
+        ([x1 + r, y1 + r], PI),
+    ];
+    corners
+        .into_iter()
+        .flat_map(|([cx, cy], start)| {
+            (0..=steps).map(move |i| {
+                let t = start + FRAC_PI_2 * i as f64 / steps as f64;
+                [cx + r * t.cos(), cy + r * t.sin()]
+            })
+        })
+        .collect()
 }
 
 fn polygon(corners: &[geometry::Point], transform: Affine) -> Path {

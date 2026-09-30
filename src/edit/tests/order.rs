@@ -85,3 +85,19 @@ fn grouped_elements_select_together_and_double_click_enters_the_group() {
     editor.command(Command::Undo);
     assert_eq!(editor.scene().elements[0].group_ids(), [group.as_str()]);
 }
+
+#[test]
+fn grouping_gathers_members_under_the_topmost_and_a_whole_group_is_left_alone() {
+    let mut editor = editor();
+    click(&mut editor, [50.0, 25.0], NONE);
+    click(&mut editor, [150.0, 0.0], SHIFT);
+    editor.command(Command::Group);
+    assert_eq!(ids(&editor), ["b", "t", "a", "r"]);
+    let groups = |editor: &Editor| editor.scene().elements[2].group_ids().len();
+    assert_eq!(groups(&editor), 1);
+
+    click(&mut editor, [600.0, 600.0], NONE);
+    click(&mut editor, [50.0, 25.0], NONE);
+    editor.command(Command::Group);
+    assert_eq!(groups(&editor), 1, "no group around a lone group");
+}

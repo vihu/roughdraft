@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::f64::consts::{SQRT_2, TAU};
 
-use super::Editor;
+use super::{Editor, Gesture};
 use crate::geometry::{self, Point};
 use crate::scene::{ArrowEnd, Binding, BoundRef, Element, Kind};
 
@@ -31,32 +31,69 @@ enum Outline {
     Ellipse,
 }
 
+// Public API
+impl Editor {
+    /// Returns the shape the moving end of the arrow being drawn or dragged
+    /// would bind to, for Excalidraw's binding highlight.
+    // ponytail: only the end under the pointer; Excalidraw also highlights
+    // under the arrow tool before a press and while moving bound arrows.
+    pub fn binding_suggestion(&self) -> Option<&Element> {
+        let (index, end) = match (&self.gesture, &self.multi) {
+            (_, Some(multi)) => (multi.index, ArrowEnd::End),
+            (
+                Some(Gesture::Line {
+                    index,
+                    dragged: true,
+                    ..
+                }),
+                _,
+            ) => (*index, ArrowEnd::End),
+            (
+                Some(Gesture::Endpoint {
+                    index, which: 0, ..
+                }),
+                _,
+            ) => (*index, ArrowEnd::Start),
+            (Some(Gesture::Endpoint { index, .. }), _) => (*index, ArrowEnd::End),
+            _ => return None,
+        };
+        self.binding_target(index, end)
+    }
+}
+
 // Private API
 impl Editor {
     /// Binds each end of the arrow at `index` to the shape under it, or
     /// unbinds it (`bindOrUnbindLinearElement`). Only arrows bind.
     pub(super) fn bind_arrow_ends(&mut self, index: usize) {
-        if !matches!(self.scene.elements[index].kind, Kind::Arrow(_)) {
-            return;
-        }
         for end in [ArrowEnd::Start, ArrowEnd::End] {
-            let arrow = &self.scene.elements[index];
-            let points = arrow_points(arrow);
-            let edge = points[end_index(end, points.len())];
-            let other = arrow.binding(opposite(end)).map(|b| b.element_id);
-            let simple = points.len() < 3;
-            let target = self
-                .scene
-                .elements
-                .iter()
-                .rev()
-                .filter(|e| is_bindable(e) && e.base.id != arrow.base.id)
-                // Don't bind both ends of a simple segment to one shape.
-                .filter(|e| !(simple && other.as_deref() == Some(e.base.id.as_str())))
-                .find(|e| distance_to_outline(e, edge) <= max_binding_gap(e, self.zoom))
-                .map(|e| e.base.id.clone());
+            if !matches!(self.scene.elements[index].kind, Kind::Arrow(_)) {
+                return;
+            }
+            let target = self.binding_target(index, end).map(|e| e.base.id.clone());
             self.set_arrow_binding(index, end, target);
         }
+    }
+
+    /// The topmost shape within binding distance of one end of the arrow at
+    /// `index` (`getHoveredElementForBinding`).
+    fn binding_target(&self, index: usize, end: ArrowEnd) -> Option<&Element> {
+        let arrow = &self.scene.elements[index];
+        if !matches!(arrow.kind, Kind::Arrow(_)) {
+            return None;
+        }
+        let points = arrow_points(arrow);
+        let edge = points[end_index(end, points.len())];
+        let other = arrow.binding(opposite(end)).map(|b| b.element_id);
+        let simple = points.len() < 3;
+        self.scene
+            .elements
+            .iter()
+            .rev()
+            .filter(|e| is_bindable(e) && e.base.id != arrow.base.id)
+            // Don't bind both ends of a simple segment to one shape.
+            .filter(|e| !(simple && other.as_deref() == Some(e.base.id.as_str())))
+            .find(|e| distance_to_outline(e, edge) <= max_binding_gap(e, self.zoom))
     }
 
     /// Moves arrow ends bound to any element in `changed`, so they keep
