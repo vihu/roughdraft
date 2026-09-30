@@ -4,7 +4,7 @@
 //! (filled, labelled, or text) hit anywhere inside; the rest only within the
 //! threshold of their outline.
 use crate::geometry::{self, Point};
-use crate::render::{Item, Segment, is_transparent};
+use crate::render::{Segment, is_transparent};
 use crate::scene::{Element, Kind, Scene};
 
 /// Screen pixels around an outline that still hit it
@@ -147,15 +147,10 @@ fn curve(element: &Element) -> Vec<Vec<Point>> {
     /// Samples per cubic segment.
     const STEPS: usize = 8;
 
-    let Some(drawing) = crate::render::render_element(element, "#ffffff") else {
-        return Vec::new();
-    };
-    let Some(Item::Stroke { path, .. }) = drawing.items.first() else {
-        return Vec::new();
-    };
+    let path = crate::render::curve_path(element);
     let mut strokes: Vec<Vec<Point>> = Vec::new();
     let mut last = [0.0, 0.0];
-    for segment in path {
+    for segment in &path {
         match *segment {
             Segment::MoveTo(p) => strokes.push(vec![p]),
             Segment::LineTo(p) => strokes.last_mut().into_iter().for_each(|s| s.push(p)),
@@ -337,5 +332,19 @@ mod tests {
             "the curve leaves the chords: {bulge:?}"
         );
         assert_eq!(at(&scene, bulge), Some("l"));
+    }
+
+    #[test]
+    fn filled_round_loops_hit_along_their_drawn_outline() {
+        // The first drawn item of a filled loop is its fill; the outline
+        // used to be looked for there and came back empty.
+        let line = r##"{"id":"l","type":"line","x":0,"y":0,"width":100,"height":80,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#ffc9c9","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":{"type":2},"roughness":1,"opacity":100,"seed":7,"isDeleted":false,"points":[[0,0],[100,0],[50,80],[0,0]]}"##;
+        let scene = scene(&[line.to_owned()]);
+        let outline: Vec<[f64; 2]> = super::curve(&scene.elements[0])
+            .into_iter()
+            .flatten()
+            .collect();
+        assert!(outline.len() > 20);
+        assert!(outline.iter().all(|&p| at(&scene, p) == Some("l")));
     }
 }

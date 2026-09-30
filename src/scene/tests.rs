@@ -118,3 +118,17 @@ fn numbers_parse_exactly_and_write_back_digit_for_digit() {
     let scene: Scene = serde_json::from_str(input).unwrap();
     assert_eq!(serde_json::to_string(&scene).unwrap(), input);
 }
+
+#[test]
+fn lines_with_fewer_than_two_points_restore_to_their_box() {
+    // `restoreElement`: an empty `points` array became a line that panicked
+    // when resized.
+    let json = format!(
+        r#"{{"type":"excalidraw","elements":[{{"id":"l","type":"line",{BASE},"points":[]}}]}}"#
+    );
+    let scene: Scene = serde_json::from_str(&json).unwrap();
+    let Kind::Line(line) = &scene.elements[0].kind else {
+        panic!("line")
+    };
+    assert_eq!(line.points, [[0.0, 0.0], [100.0, 50.0]]);
+}

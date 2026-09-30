@@ -506,7 +506,7 @@ fn scale_element(original: &Element, frame: &Frame, bounds: Bounds) -> Element {
                 .iter()
                 .map(|p| [(p[0] - mid[0]) * sx, (p[1] - mid[1]) * sy])
                 .collect();
-            let first = scaled[0];
+            let first = scaled.first().copied().unwrap_or_default();
             line.points = scaled
                 .iter()
                 .map(|p| [p[0] - first[0], p[1] - first[1]])
@@ -555,6 +555,16 @@ fn scale_element(original: &Element, frame: &Frame, bounds: Bounds) -> Element {
             element.base.width = w;
             element.base.height = h;
         }
+    }
+    // Pulled past its opposite side, an image mirrors (`scale` times the
+    // sign of the new size in `resizeSingleElement`).
+    if element.file_id().is_some() && (x2 < x1 || y2 < y1) {
+        let [fx, fy] = original.image_flip();
+        let sign = |mirrored: bool| if mirrored { -1 } else { 1 };
+        element.json_mut().insert(
+            "scale".into(),
+            serde_json::json!([sign(fx != (x2 < x1)), sign(fy != (y2 < y1))]),
+        );
     }
     element
 }

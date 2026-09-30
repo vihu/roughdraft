@@ -2,7 +2,7 @@
 //! sections 7-8), element locks.
 use std::collections::{HashMap, HashSet};
 
-use super::{Command, Editor, Tool};
+use super::{Command, Editor, Gesture, Tool};
 use crate::geometry::Point;
 use crate::hit::container_id;
 use crate::scene::Element;
@@ -15,9 +15,11 @@ const DUPLICATE_OFFSET: f64 = 10.0;
 
 // Public API
 impl Editor {
-    /// Runs a keyboard command. Any command first finishes a multi-point
-    /// line or arrow in progress.
+    /// Runs a keyboard command. Any command first abandons a pointer
+    /// gesture in progress (the scene goes back to where it started) and
+    /// finishes a multi-point line or arrow in progress.
     pub fn command(&mut self, command: Command) {
+        self.cancel_gesture();
         self.finish_text();
         let drawing = self.multi.is_some();
         self.finish_multi();
@@ -105,6 +107,27 @@ impl Editor {
 
 // Private API
 impl Editor {
+    /// Drops a pointer gesture and puts back the scene it started from, so
+    /// nothing runs against the element indices it holds (an undo while
+    /// dragging would leave them dangling).
+    fn cancel_gesture(&mut self) {
+        let before = match self.gesture.take() {
+            Some(
+                Gesture::Move { before, .. }
+                | Gesture::Shape { before, .. }
+                | Gesture::Line { before, .. }
+                | Gesture::Resize { before, .. }
+                | Gesture::Rotate { before, .. }
+                | Gesture::Endpoint { before, .. }
+                | Gesture::Points { before, .. },
+            ) => before,
+            Some(Gesture::Marquee { .. } | Gesture::Erase { .. }) | None => return,
+        };
+        self.scene.elements = before;
+        self.prune_selection();
+        self.prune_line_edit();
+    }
+
     /// Deletes the selection and its labels; a deleted frame's children
     /// stay, out of the frame and selected (`actionDeleteSelected`).
     pub(super) fn delete(&mut self) {

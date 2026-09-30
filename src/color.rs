@@ -141,10 +141,12 @@ fn arguments<'a>(css: &'a str, names: &[&str]) -> Option<Vec<&'a str>> {
 
 /// A number, or a percentage of `whole`.
 fn number(value: &str, whole: f32) -> Option<f32> {
-    match value.strip_suffix('%') {
+    let parsed = match value.strip_suffix('%') {
         Some(pct) => pct.parse::<f32>().ok().map(|p| p / 100.0 * whole),
         None => value.parse().ok(),
-    }
+    };
+    // `nan` and `inf` parse as floats but are not CSS numbers.
+    parsed.filter(|n: &f32| n.is_finite())
 }
 
 /// An `rgb()` channel, 0 to 255 or a percentage.
@@ -164,13 +166,14 @@ fn percent(value: &str) -> Option<f32> {
 
 /// A hue in degrees (`deg`, `turn`, `rad` or a bare number).
 fn hue(value: &str) -> Option<f32> {
-    if let Some(turns) = value.strip_suffix("turn") {
-        return turns.parse::<f32>().ok().map(|t| t * 360.0);
-    }
-    if let Some(radians) = value.strip_suffix("rad") {
-        return radians.parse::<f32>().ok().map(f32::to_degrees);
-    }
-    value.trim_end_matches("deg").parse().ok()
+    let degrees = if let Some(turns) = value.strip_suffix("turn") {
+        turns.parse::<f32>().ok().map(|t| t * 360.0)
+    } else if let Some(radians) = value.strip_suffix("rad") {
+        radians.parse::<f32>().ok().map(f32::to_degrees)
+    } else {
+        value.trim_end_matches("deg").parse().ok()
+    };
+    degrees.filter(|d: &f32| d.is_finite())
 }
 
 /// CSS Color 4's `hslToRgb`.
@@ -253,6 +256,18 @@ mod tests {
         assert_eq!(Rgba::parse("#ffffff00").map(|c| c.a), Some(0.0));
         assert_eq!(Rgba::parse("#f008").map(|c| c.a), Some(0x88 as f32 / 255.0));
         assert_eq!(Rgba::parse("transparent").map(|c| c.a), Some(0.0));
+    }
+
+    #[test]
+    fn rejects_numbers_css_does_not_have() {
+        for css in [
+            "rgb(nan, 0, 0)",
+            "rgb(inf, 0, 0)",
+            "hsl(NaN, 50%, 50%)",
+            "hsl(1e40, 50%, 50%)",
+        ] {
+            assert_eq!(Rgba::parse(css), None, "{css}");
+        }
     }
 
     #[test]

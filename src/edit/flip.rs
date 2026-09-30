@@ -40,9 +40,16 @@ impl Editor {
                     .into_iter()
                     .any(|end| e.binding(end).is_some())
         };
-        if indices
+        // Excalidraw's selection counts labels, so a labelled arrow is not
+        // "only bound arrows" and flips for real.
+        let labelled = self
+            .moving_with_children()
             .iter()
-            .all(|&i| bound_arrow(&self.scene.elements[i]))
+            .any(|&(i, _)| container_id(&self.scene.elements[i]).is_some());
+        if !labelled
+            && indices
+                .iter()
+                .all(|&i| bound_arrow(&self.scene.elements[i]))
         {
             for &i in &indices {
                 if let Kind::Arrow(line) = &mut self.scene.elements[i].kind {

@@ -1,7 +1,13 @@
 //! Style panel changes applied to the selection (`actions/actionProperties.tsx`).
 use super::{Editor, Style, StyleChange};
 use crate::hit::container_id;
-use crate::scene::{Kind, Roundness};
+use crate::scene::{Kind, Roundness, TextAlign};
+
+/// `DEFAULT_FONT_SIZE`.
+const DEFAULT_FONT_SIZE: f64 = 20.0;
+
+/// `DEFAULT_FONT_FAMILY`: Excalifont.
+const DEFAULT_FONT_FAMILY: u32 = 5;
 
 /// `ROUNDNESS.PROPORTIONAL_RADIUS`.
 const PROPORTIONAL: u8 = 2;
@@ -168,6 +174,14 @@ impl Editor {
                     text.font_family = from.font_family;
                     text.text_align = from.text_align.clone();
                     text.line_height = from.line_height;
+                }
+                // A style from something else gives text the defaults
+                // (`DEFAULT_FONT_SIZE`, `DEFAULT_FONT_FAMILY`, left).
+                (Kind::Text(text), _) => {
+                    text.font_size = DEFAULT_FONT_SIZE;
+                    text.font_family = DEFAULT_FONT_FAMILY;
+                    text.text_align = TextAlign::Left;
+                    text.line_height = crate::scene::line_height(DEFAULT_FONT_FAMILY);
                 }
                 (Kind::Arrow(line), Kind::Arrow(from)) => {
                     line.start_arrowhead = from.start_arrowhead.clone();

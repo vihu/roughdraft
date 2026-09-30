@@ -7,7 +7,7 @@
 use rough_rs::{Generator, OpType};
 
 use super::linear::curve_ops;
-use super::rough_options;
+use super::{Segment, rough_options, segments};
 use crate::geometry::Point;
 use crate::scene::{Element, Kind, Linear};
 
@@ -41,6 +41,17 @@ pub(crate) fn segment_length(element: &Element, end: usize) -> f64 {
             .unwrap_or(0.0);
     }
     (b[0] - a[0]).hypot(b[1] - a[1])
+}
+
+/// A round line's drawn shaft as a path (`getCurvePathOps`): its stroke
+/// set, without fill or arrowheads. Empty for other elements.
+pub(crate) fn curve_path(element: &Element) -> Vec<Segment> {
+    let (Kind::Line(line) | Kind::Arrow(line)) = &element.kind else {
+        return Vec::new();
+    };
+    // Same options and seed as the rendered shaft, which is generated first.
+    let shaft = Generator::default().curve(&line.points, Some(rough_options(element, false)));
+    segments(curve_ops(&shaft))
 }
 
 /// The cubic of a round line's drawn shaft that ends nearest `end`

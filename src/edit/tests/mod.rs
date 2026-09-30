@@ -159,6 +159,7 @@ mod clipboard;
 mod create;
 mod frame;
 mod order;
+mod regressions;
 mod style;
 mod text;
 mod transform;

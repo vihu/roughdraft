@@ -59,7 +59,11 @@ pub(super) fn typed_view(json: &Map<String, Value>) -> Value {
     }
     match kind {
         "text" => restore_text(&mut typed),
-        "line" | "arrow" if typed.get("points").is_none_or(|p| !p.is_array()) => {
+        "line" | "arrow"
+            if typed
+                .get("points")
+                .is_none_or(|p| p.as_array().is_none_or(|points| points.len() < 2)) =>
+        {
             let (w, h) = (&typed["width"], &typed["height"]);
             let points = json!([[0, 0], [w, h]]);
             typed.insert("points".into(), points);
