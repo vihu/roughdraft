@@ -13,7 +13,8 @@ pub const THRESHOLD: f64 = 8.0;
 
 /// Returns the topmost element at `at`, within `threshold` scene units.
 ///
-/// Labels are never returned: hitting a label hits its container.
+/// Labels are never returned: hitting a label hits its container. Locked
+/// elements are skipped (`getElementsAtPosition`).
 pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> {
     let order = crate::render::draw_order(scene);
     let label_of = |container: &Element| {
@@ -26,7 +27,8 @@ pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> 
         .iter()
         .rev()
         .copied()
-        .filter(|e| container_id(e).is_none())
+        // Locked elements are skipped, so what is below them can be hit.
+        .filter(|e| container_id(e).is_none() && !e.is_locked())
         .find(|e| {
             let label = label_of(e);
             hits(e, label.is_some(), at, threshold) || label.is_some_and(|l| in_box(l, at, 0.0))

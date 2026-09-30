@@ -130,13 +130,14 @@ pub enum Command {
 #[derive(Debug)]
 enum Gesture {
     /// Dragging the selection. `clicked` narrows the selection to itself if
-    /// the press ends without moving.
+    /// the press ends without moving; `duplicated` once Alt has made copies.
     Move {
         from: Point,
         before: Vec<Element>,
         starts: Vec<(usize, Point)>,
         moved: bool,
         clicked: Option<String>,
+        duplicated: bool,
     },
     /// Rubber-band selection; `keep` stays selected (shift).
     Marquee {
@@ -368,7 +369,11 @@ impl Editor {
             Command::Delete => self.delete(),
             Command::Duplicate => self.duplicate(),
             Command::SelectAll => {
-                self.selected = self.top_level().map(|e| e.base.id.clone()).collect();
+                self.selected = self
+                    .top_level()
+                    .filter(|e| !e.is_locked())
+                    .map(|e| e.base.id.clone())
+                    .collect();
             }
             Command::Undo => {
                 if self.history.undo(&mut self.scene.elements) {

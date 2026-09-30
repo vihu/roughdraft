@@ -161,3 +161,68 @@ mod order;
 mod style;
 mod text;
 mod transform;
+
+#[test]
+fn alt_drag_leaves_a_copy_behind_and_drags_the_new_one_on_top() {
+    let mut editor = editor();
+    let alt = Modifiers {
+        alt: true,
+        ..Modifiers::default()
+    };
+    drag(&mut editor, [250.0, 25.0], [250.0, 125.0], alt);
+    let elements = &editor.scene().elements;
+    assert_eq!(elements.len(), 6, "b and its label copied");
+    assert_eq!(
+        (x(&editor, "b"), elements[1].base.y),
+        (200.0, 0.0),
+        "original stays"
+    );
+    let (copy, label) = (&elements[4], &elements[5]);
+    assert_eq!((copy.base.x, copy.base.y), (200.0, 100.0));
+    let Kind::Text(text) = &label.kind else {
+        panic!("label")
+    };
+    assert_eq!(text.container_id.as_deref(), Some(copy.base.id.as_str()));
+    assert_eq!(label.base.y, 100.0);
+    assert!(editor.is_selected(&copy.base.id) && !editor.is_selected("b"));
+    let arrow = serde_json::to_value(&elements[3]).unwrap();
+    assert_eq!(
+        arrow["endBinding"]["elementId"], "b",
+        "the arrow stays with the original"
+    );
+
+    editor.command(Command::Undo);
+    assert_eq!(editor.scene().elements.len(), 4);
+}
+
+#[test]
+fn locked_elements_are_drawn_but_not_selectable() {
+    let json = format!(
+        r##"{{"type":"excalidraw","elements":[
+            {{"id":"under","type":"rectangle","x":0,"backgroundColor":"#a5d8ff","boundElements":null,{BASE}}},
+            {{"id":"lock","type":"rectangle","x":0,"backgroundColor":"#a5d8ff","boundElements":null,"locked":true,{BASE}}}
+        ]}}"##
+    );
+    let mut editor = Editor::new(serde_json::from_str::<Scene>(&json).unwrap());
+    drag(
+        &mut editor,
+        [50.0, 25.0],
+        [50.0, 25.0],
+        Modifiers::default(),
+    );
+    assert!(editor.is_selected("under"), "the click goes through");
+    assert!(!editor.is_selected("lock"));
+    editor.command(Command::SelectAll);
+    assert!(!editor.is_selected("lock"));
+    editor.command(Command::Escape);
+    drag(
+        &mut editor,
+        [-20.0, -20.0],
+        [120.0, 70.0],
+        Modifiers::default(),
+    );
+    assert!(
+        editor.is_selected("under") && !editor.is_selected("lock"),
+        "box select"
+    );
+}

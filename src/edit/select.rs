@@ -1,6 +1,6 @@
 //! Selection tool: click, shift-click, box select, move
 //! (REFERENCE-001 sections 3 and 6).
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{Editor, Gesture, Modifiers, common_bounds, normalize};
 use crate::geometry::{self, Point};
@@ -88,11 +88,65 @@ impl Editor {
             starts: self.moving(),
             moved: false,
             clicked,
+            duplicated: false,
         });
+    }
+
+    /// Alt+drag: copies of the moving elements go on top, become the
+    /// selection and take over the drag; the originals go back to where the
+    /// drag started, keeping their ids and bindings. Excalidraw swaps ids the
+    /// other way round (the copies stay), which looks the same.
+    fn alt_duplicate(&mut self) {
+        let Some(Gesture::Move {
+            starts, duplicated, ..
+        }) = &mut self.gesture
+        else {
+            return;
+        };
+        *duplicated = true;
+        let starts = std::mem::take(starts);
+        let ids: HashMap<String, String> = starts
+            .iter()
+            .map(|(i, _)| (self.scene.elements[*i].base.id.clone(), crate::random::id()))
+            .collect();
+        let mut groups = HashMap::new();
+        let copies: Vec<Element> = starts
+            .iter()
+            .map(|(i, _)| {
+                let original = &self.scene.elements[*i];
+                let mut copy = original.duplicate();
+                copy.base.id = ids[&original.base.id].clone();
+                copy.remap(&ids, &mut groups);
+                copy
+            })
+            .collect();
+        for &(i, start) in &starts {
+            self.place(i, start);
+        }
+        self.update_bound_arrows(&ids.keys().cloned().collect());
+        self.selected = copies
+            .iter()
+            .filter(|c| container_id(c).is_none())
+            .map(|c| c.base.id.clone())
+            .collect();
+        let first = self.scene.elements.len();
+        self.scene.elements.extend(copies);
+        if let Some(Gesture::Move { starts: moving, .. }) = &mut self.gesture {
+            *moving = (first..)
+                .zip(starts.iter().map(|(_, start)| *start))
+                .collect();
+        }
     }
 
     /// Continues a move or box select; returns `false` for other gestures.
     pub(super) fn select_drag(&mut self, at: Point, modifiers: Modifiers) -> bool {
+        if modifiers.alt
+            && let Some(Gesture::Move {
+                duplicated: false, ..
+            }) = self.gesture
+        {
+            self.alt_duplicate();
+        }
         match &mut self.gesture {
             Some(Gesture::Move {
                 from,
@@ -132,6 +186,7 @@ impl Editor {
                     let [a, b, c, d] = geometry::element_bounds(e);
                     !e.base.is_deleted
                         && container_id(e).is_none()
+                        && !e.is_locked()
                         && a >= x1
                         && b >= y1
                         && c <= x2

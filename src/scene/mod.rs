@@ -361,6 +361,15 @@ impl Element {
         }
     }
 
+    /// Whether the element is locked (`locked`): drawn, but not selectable
+    /// by clicking, box selection or select all.
+    pub fn is_locked(&self) -> bool {
+        self.json
+            .get("locked")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+
     /// Returns an image element's file id.
     pub fn file_id(&self) -> Option<&str> {
         match &self.kind {
