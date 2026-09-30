@@ -189,7 +189,7 @@ impl Editor {
                     style.end_arrowhead.clone(),
                 ))
             }
-            Tool::Selection | Tool::Hand | Tool::Text => return None,
+            Tool::Selection | Tool::Hand | Tool::Text | Tool::Eraser => return None,
         };
         Some(Element::new(kind, base))
     }

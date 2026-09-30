@@ -472,11 +472,18 @@ impl Sketch {
         let visible = |[a, b, c, d]: Bounds| a <= x2 && b <= y2 && c >= ox && d >= oy;
         // The element being typed is shown by the text overlay instead.
         let shown = ids.iter().filter(|id| self.editing.as_ref() != Some(*id));
+        let erasing = self.editor.pending_erasure();
         let drawings = shown
-            .map(|id| &self.drawings[id])
-            .filter(|rendered| visible(rendered.extent))
-            .filter_map(|rendered| rendered.drawing.as_ref());
-        for drawing in drawings {
+            .map(|id| (id, &self.drawings[id]))
+            .filter(|(_, rendered)| visible(rendered.extent))
+            .filter_map(|(id, rendered)| Some((id, rendered.drawing.as_ref()?)));
+        for (id, drawing) in drawings {
+            // `ELEMENT_READY_TO_ERASE_OPACITY`: 20%.
+            let fade = if erasing.is_some_and(|marked| marked.contains(id)) {
+                0.2
+            } else {
+                1.0
+            };
             let transform = drawing.transform.then(view);
             for item in &drawing.items {
                 match item {
@@ -488,9 +495,9 @@ impl Sketch {
                         flip,
                     } => {
                         let picture = Picture::of(file_id, crop.as_ref(), *flip);
-                        self.draw_image(frame, &picture, *size, *opacity, transform);
+                        self.draw_image(frame, &picture, *size, *opacity * fade, transform);
                     }
-                    _ => paint::draw_item(frame, item, transform, &|c| self.paint(c)),
+                    _ => paint::draw_item(frame, item, transform, &|c| self.paint(c.fade(fade))),
                 }
             }
         }

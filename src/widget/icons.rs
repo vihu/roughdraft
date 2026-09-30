@@ -115,6 +115,20 @@ impl canvas::Program<Message> for Icon {
                 polyline(&[(10.0, 4.0), (16.0, 4.0), (16.0, 10.0)], false),
             ],
             Glyph::Tool(Tool::Line) => vec![polyline(&[(3.5, 10.0), (16.5, 10.0)], false)],
+            Glyph::Tool(Tool::Eraser) => vec![
+                polyline(
+                    &[
+                        (8.0, 17.0),
+                        (3.5, 12.5),
+                        (11.5, 4.5),
+                        (17.0, 10.0),
+                        (10.0, 17.0),
+                    ],
+                    true,
+                ),
+                polyline(&[(7.0, 9.0), (12.5, 14.5)], false),
+                polyline(&[(10.0, 17.0), (17.0, 17.0)], false),
+            ],
             Glyph::Tool(Tool::Text) => vec![
                 polyline(&[(5.0, 16.0), (10.0, 4.0), (15.0, 16.0)], false),
                 polyline(&[(7.0, 12.0), (13.0, 12.0)], false),

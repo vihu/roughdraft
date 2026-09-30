@@ -12,7 +12,8 @@
 //!   memos), Ctrl+Shift+S save as, 9 insert an image file. The title shows
 //!   `*` while there are unsaved changes.
 //! - Tools: V or 1 select, H hand, R or 2 rectangle, D or 3 diamond, O or 4
-//!   ellipse, A or 5 arrow, L or 6 line, T or 8 text; Q keeps the tool.
+//!   ellipse, A or 5 arrow, L or 6 line, T or 8 text, E or 0 eraser (drag
+//!   across elements; Alt un-marks); Q keeps the tool.
 //!   Lines and arrows: drag, or click point by point and finish with Enter,
 //!   Escape or a click on the last point; drag any point of a selected one;
 //!   Ctrl+Enter or Ctrl+double-click opens the line editor (click and

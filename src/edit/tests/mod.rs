@@ -226,3 +226,56 @@ fn locked_elements_are_drawn_but_not_selectable() {
         "box select"
     );
 }
+
+#[test]
+fn eraser_drag_marks_then_deletes_with_labels_and_alt_unmarks() {
+    let mut editor = editor();
+    editor.command(Command::Tool(crate::edit::Tool::Eraser));
+    // Across a (0..100) and b (200..300) at y 25.
+    editor.pointer(Pointer::Down, [50.0, 25.0], Modifiers::default());
+    editor.pointer(Pointer::Move, [250.0, 25.0], Modifiers::default());
+    let marked = editor.pending_erasure().unwrap().clone();
+    assert!(
+        marked.contains("a") && marked.contains("b") && marked.contains("t"),
+        "{marked:?}"
+    );
+    assert!(
+        editor.active().contains(&"a"),
+        "drawn faded on the moving layer"
+    );
+    // Alt back over b unmarks it and its label.
+    let alt = Modifiers {
+        alt: true,
+        ..Modifiers::default()
+    };
+    editor.pointer(Pointer::Move, [260.0, 25.0], alt);
+    let marked = editor.pending_erasure().unwrap();
+    assert!(!marked.contains("b") && !marked.contains("t"));
+    editor.pointer(Pointer::Up, [260.0, 25.0], Modifiers::default());
+
+    let deleted = |editor: &Editor, id: &str| {
+        editor
+            .scene()
+            .elements
+            .iter()
+            .any(|e| e.base.id == id && e.base.is_deleted)
+    };
+    assert!(deleted(&editor, "a"));
+    assert!(
+        !deleted(&editor, "r"),
+        "the arrow at y 0 is 25 away from the path"
+    );
+    assert!(!deleted(&editor, "b") && !deleted(&editor, "t"));
+    assert_eq!(editor.tool(), crate::edit::Tool::Eraser, "the tool stays");
+    editor.command(Command::Undo);
+    assert!(!deleted(&editor, "a"));
+
+    // A click erases what is under it; b's label goes with it.
+    drag(
+        &mut editor,
+        [250.0, 25.0],
+        [250.0, 25.0],
+        Modifiers::default(),
+    );
+    assert!(deleted(&editor, "b") && deleted(&editor, "t"));
+}

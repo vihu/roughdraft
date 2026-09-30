@@ -7,6 +7,7 @@ mod binding;
 mod clipboard;
 mod commands;
 mod create;
+mod eraser;
 mod group;
 mod line;
 mod order;
@@ -75,6 +76,8 @@ pub enum Tool {
     Line,
     /// Click to type text; on a shape, its label.
     Text,
+    /// Drag across elements to delete them.
+    Eraser,
 }
 
 /// Modifier keys held during a pointer event.
@@ -195,6 +198,11 @@ enum Gesture {
         which: usize,
         before: Vec<Element>,
     },
+    /// Erasing: what the pointer passed over since the press.
+    Erase {
+        last: Point,
+        marked: HashSet<String>,
+    },
     /// Dragging the selected points in the line editor; `starts` holds each
     /// point's index and scene position at the press.
     Points {
@@ -311,6 +319,8 @@ impl Editor {
                 ),
                 _,
             ) => vec![id(*index)],
+            // Marked for erasing: drawn faded, on the moving layer.
+            (Some(Gesture::Erase { marked, .. }), _) => marked.iter().map(String::as_str).collect(),
             (Some(Gesture::Resize { start, .. } | Gesture::Rotate { start, .. }), _) => {
                 self.with_bound_arrows(start.iter().map(|(i, _)| id(*i)).collect())
             }
@@ -344,6 +354,7 @@ impl Editor {
                     Tool::Selection => self.select_press(at, modifiers),
                     Tool::Hand => {}
                     Tool::Text => self.text_press(at),
+                    Tool::Eraser => self.erase_press(at, modifiers),
                     _ => self.create_press(at, modifiers),
                 }
             }
@@ -351,13 +362,14 @@ impl Editor {
                 self.multi_hover(at, modifiers)
             }
             Pointer::Move => {
-                let _ = self.select_drag(at, modifiers)
+                let _ = self.erase_drag(at, modifiers)
+                    || self.select_drag(at, modifiers)
                     || self.drag_handle(at, modifiers)
                     || self.create_drag(at, modifiers);
             }
             Pointer::Hover => self.hover = Some(at),
             Pointer::Up => {
-                if !self.select_release() {
+                if !self.erase_release() && !self.select_release() {
                     self.create_release(at);
                 }
             }

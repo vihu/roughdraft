@@ -85,6 +85,7 @@ fn session(seed: u64) {
                 Tool::Line,
                 Tool::Text,
                 Tool::Hand,
+                Tool::Eraser,
             ]))),
             10 => editor.command(rng.pick(&[
                 Command::EditLine,

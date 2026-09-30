@@ -16,6 +16,12 @@ pub const THRESHOLD: f64 = 8.0;
 /// Labels are never returned: hitting a label hits its container. Locked
 /// elements are skipped (`getElementsAtPosition`).
 pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> {
+    elements_at(scene, at, threshold).into_iter().next()
+}
+
+/// Returns every element at `at`, topmost first, with the same rules as
+/// [`element_at`].
+pub fn elements_at(scene: &Scene, at: Point, threshold: f64) -> Vec<&Element> {
     let order = crate::render::draw_order(scene);
     let label_of = |container: &Element| {
         order
@@ -29,10 +35,11 @@ pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> 
         .copied()
         // Locked elements are skipped, so what is below them can be hit.
         .filter(|e| container_id(e).is_none() && !e.is_locked())
-        .find(|e| {
+        .filter(|e| {
             let label = label_of(e);
             hits(e, label.is_some(), at, threshold) || label.is_some_and(|l| in_box(l, at, 0.0))
         })
+        .collect()
 }
 
 /// Whether `at` lies in the element's rotated box grown by `pad` on each side.
