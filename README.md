@@ -70,7 +70,10 @@ assert!(preview.starts_with("<svg"));
 # }
 ```
 
-Run it with `iced::application(..)` as usual. Images the scene stores
+Run it with `iced::application(..)` as usual. To autosave, keep
+`sketch.scene().version()` from the last save and save again when it
+differs; it changes on every edit and returns to the saved value when the
+edits are undone. Images the scene stores
 elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 `Sketch::insert_image` adds an image file, and Ctrl+V pastes a copied image.
 

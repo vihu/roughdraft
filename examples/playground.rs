@@ -27,7 +27,7 @@
 use std::path::PathBuf;
 
 use iced::keyboard::{self, key};
-use iced::widget::{center, text};
+use iced::widget::{container, stack, text};
 use iced::{Element, Subscription, Task};
 use roughdraft::scene::Scene;
 use roughdraft::widget::{self, Appearance, Sketch};
@@ -97,6 +97,8 @@ struct Playground {
     path: Option<PathBuf>,
     sketch: Sketch,
     error: Option<String>,
+    /// `Scene::version` when last opened or saved.
+    saved: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -105,8 +107,12 @@ enum Message {
     ToggleAppearance,
     Open,
     Opened(Option<PathBuf>),
-    Save { choose: bool },
-    Saved(Result<PathBuf, String>),
+    Save {
+        choose: bool,
+    },
+    /// Where it was written (`None` when the dialog was cancelled), and the
+    /// scene version that was written.
+    Saved(Result<Option<PathBuf>, String>, u32),
     PickImage,
     ImagePicked(Option<Vec<u8>>),
 }
@@ -122,6 +128,7 @@ impl Playground {
         sketch.set_appearance(appearance);
         Self {
             path,
+            saved: sketch.scene().version(),
             sketch,
             error,
         }
@@ -133,8 +140,13 @@ impl Playground {
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned());
+        let unsaved = if self.sketch.scene().version() == self.saved {
+            ""
+        } else {
+            "*"
+        };
         format!(
-            "{} - roughdraft playground",
+            "{}{unsaved} - roughdraft playground",
             name.as_deref().unwrap_or("untitled")
         )
     }
@@ -154,14 +166,19 @@ impl Playground {
             Message::Save { choose } => {
                 let json = serde_json::to_string_pretty(&self.sketch.scene().saved())
                     .expect("scenes serialize");
+                let version = self.sketch.scene().version();
                 let path = self.path.clone().filter(|_| !choose);
-                return Task::perform(save_file(path, json), Message::Saved);
+                return Task::perform(save_file(path, json), move |result| {
+                    Message::Saved(result, version)
+                });
             }
-            Message::Saved(Ok(path)) => {
+            Message::Saved(Ok(Some(path)), version) => {
                 self.error = None;
                 self.path = Some(path);
+                self.saved = version;
             }
-            Message::Saved(Err(error)) => self.error = Some(error),
+            Message::Saved(Ok(None), _) => {}
+            Message::Saved(Err(error), _) => self.error = Some(error),
             Message::PickImage => return Task::perform(pick_image(), Message::ImagePicked),
             Message::ImagePicked(Some(bytes)) => {
                 if let Err(error) = self.sketch.insert_image(&bytes) {
@@ -174,10 +191,22 @@ impl Playground {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        let sketch = self.sketch.view().map(Message::Sketch);
         match &self.error {
-            // ponytail: errors replace the canvas; a toast when the toolbar lands (slice 4)
-            Some(error) => center(text(error)).into(),
-            None => self.sketch.view().map(Message::Sketch),
+            // The last open or save error, over the bottom of the canvas
+            // until the next successful save.
+            Some(error) => stack![
+                sketch,
+                container(
+                    text(error)
+                        .size(14)
+                        .color(iced::Color::from_rgb8(0xe0, 0x31, 0x31))
+                )
+                .align_bottom(iced::Length::Fill)
+                .padding(16),
+            ]
+            .into(),
+            None => sketch,
         }
     }
 
@@ -241,20 +270,21 @@ async fn pick_image() -> Option<Vec<u8>> {
     Some(file.read().await)
 }
 
-async fn save_file(path: Option<PathBuf>, json: String) -> Result<PathBuf, String> {
+async fn save_file(path: Option<PathBuf>, json: String) -> Result<Option<PathBuf>, String> {
     let path = match path {
         Some(path) => path,
-        None => rfd::AsyncFileDialog::new()
-            .add_filter("Excalidraw", &["excalidraw"])
-            .set_file_name("untitled.excalidraw")
-            .save_file()
-            .await
-            .ok_or("save cancelled")?
-            .path()
-            .to_owned(),
+        None => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .add_filter("Excalidraw", &["excalidraw"])
+                .set_file_name("untitled.excalidraw");
+            let Some(file) = dialog.save_file().await else {
+                return Ok(None);
+            };
+            file.path().to_owned()
+        }
     };
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(path)
+    Ok(Some(path))
 }
 
 fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {

@@ -101,3 +101,24 @@ fn grouping_gathers_members_under_the_topmost_and_a_whole_group_is_left_alone() 
     editor.command(Command::Group);
     assert_eq!(groups(&editor), 1, "no group around a lone group");
 }
+
+#[test]
+fn scene_version_tracks_edits_reorders_and_undo() {
+    let mut editor = editor();
+    click(&mut editor, [50.0, 25.0], NONE);
+    // The fixture's nonces are all 1; a nudge gives `a` a random one.
+    editor.command(Command::Nudge([1.0, 0.0]));
+    let saved = editor.scene().version();
+    click(&mut editor, [51.0, 25.0], NONE);
+    assert_eq!(editor.scene().version(), saved, "selecting is not an edit");
+    editor.command(Command::Reorder(Order::ToFront));
+    let reordered = editor.scene().version();
+    assert_ne!(reordered, saved);
+    editor.command(Command::Nudge([1.0, 0.0]));
+    assert_ne!(editor.scene().version(), reordered);
+    editor.command(Command::Undo);
+    editor.command(Command::Undo);
+    assert_eq!(editor.scene().version(), saved, "back where it was saved");
+    editor.command(Command::Undo);
+    assert_ne!(editor.scene().version(), saved);
+}

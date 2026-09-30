@@ -241,6 +241,21 @@ impl Default for Scene {
 }
 
 impl Scene {
+    /// Returns a hash of every element's `versionNonce` in order (djb2, like
+    /// Excalidraw's `hashElementsVersion`): it changes when an element is
+    /// added, changed, deleted or reordered, and comes back when undo
+    /// restores an earlier state. Compare it with the value at the last save
+    /// to know whether there is anything to save.
+    pub fn version(&self) -> u32 {
+        /// djb2's starting value.
+        const SEED: u32 = 5381;
+        self.elements.iter().fold(SEED, |hash, element| {
+            // Nonces are 31-bit; wrapping keeps the hash in 32 bits.
+            hash.wrapping_mul(33)
+                .wrapping_add(element.revision().1 as u32)
+        })
+    }
+
     /// Returns the scene as Excalidraw saves it: deleted elements dropped and
     /// `lastCommittedPoint` cleared on lines and arrows (`serializeAsJSON`).
     #[must_use]
