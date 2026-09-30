@@ -156,3 +156,30 @@ fn inserted_image_file_lands_centred_in_the_view_as_a_data_url() {
         .unwrap();
     assert!(url.starts_with("data:image/png;base64,iVBOR"), "{url}");
 }
+
+#[test]
+fn typing_a_hex_colour_restyles_the_selection() {
+    use iced::keyboard::{Key, key::Named};
+
+    let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(480.0, 345.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    });
+    run(&mut sketch, |ui| {
+        ui.click("#1e1e1e")
+            .expect("the stroke field shows the colour");
+        ui.tap_key(Key::Named(Named::End));
+        for _ in 0..6 {
+            ui.tap_key(Key::Named(Named::Backspace));
+        }
+        // Each whole colour on the way applies, like Excalidraw's field;
+        // "#e0313" is not one, so it waits for the last digit.
+        ui.typewrite("e03131");
+    });
+    assert!(sketch.editor().is_selected("box"));
+    assert_eq!(sketch.scene().elements[0].base.stroke_color, "#e03131");
+}

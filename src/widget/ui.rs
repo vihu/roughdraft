@@ -2,7 +2,8 @@
 //! tools across the top, style options down the left. Values follow
 //! REFERENCE-001 section 14.
 use iced::widget::{
-    Column, button, column, container, opaque, pick_list, row, slider, space, text, themer,
+    Column, button, column, container, opaque, pick_list, row, slider, space, text, text_input,
+    themer,
 };
 use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
@@ -10,6 +11,23 @@ use super::{Appearance, Input, Message, Sketch};
 use crate::color::Rgba;
 use crate::edit::{Command, Style, StyleChange, Tool};
 use crate::scene::{Arrowhead, FillStyle, Kind, StrokeStyle, TextAlign};
+
+/// A colour the style panel edits as text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ColorField {
+    Stroke,
+    Background,
+}
+
+impl ColorField {
+    /// The style change that sets this colour to `css`.
+    pub(super) fn change(self, css: String) -> StyleChange {
+        match self {
+            Self::Stroke => StyleChange::StrokeColor(css),
+            Self::Background => StyleChange::BackgroundColor(css),
+        }
+    }
+}
 
 /// Stroke quick picks.
 const STROKES: [&str; 5] = ["#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"];
@@ -143,15 +161,15 @@ impl Sketch {
 
         let mut sections: Vec<Element<'_, Message>> = vec![section(
             "Stroke",
-            swatches(&STROKES, &style.stroke_color, StyleChange::StrokeColor),
+            self.colors(&STROKES, &style.stroke_color, ColorField::Stroke),
         )];
         if shapes {
             sections.push(section(
                 "Background",
-                swatches(
+                self.colors(
                     &BACKGROUNDS,
                     &style.background_color,
-                    StyleChange::BackgroundColor,
+                    ColorField::Background,
                 ),
             ));
             sections.push(section(
@@ -314,6 +332,29 @@ impl Sketch {
     }
 }
 
+impl Sketch {
+    /// Quick-pick swatches with a hex field under them for any other colour.
+    fn colors<'a>(
+        &self,
+        picks: &[&'static str],
+        current: &str,
+        field: ColorField,
+    ) -> Element<'a, Message> {
+        let typed = match &self.color_draft {
+            Some((draft, text)) if *draft == field => text.clone(),
+            _ => current.to_owned(),
+        };
+        let hex = text_input("#hex", typed)
+            .on_input(move |text| Message(Input::ColorText(field, text)))
+            .size(12)
+            .padding([2, 6])
+            .width(Length::Fixed(90.0));
+        column![swatches(picks, current, move |css| field.change(css)), hex]
+            .spacing(4)
+            .into()
+    }
+}
+
 fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Message> {
     column![text(title).size(11), content].spacing(4).into()
 }
@@ -341,7 +382,7 @@ fn choices<'a>(options: &[(&'a str, bool, StyleChange)]) -> Element<'a, Message>
 fn swatches<'a>(
     colors: &[&'static str],
     current: &str,
-    change: fn(String) -> StyleChange,
+    change: impl Fn(String) -> StyleChange,
 ) -> Element<'a, Message> {
     row(colors.iter().map(|css| {
         let Rgba { r, g, b, a } = Rgba::parse(css).unwrap_or(Rgba::WHITE);

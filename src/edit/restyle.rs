@@ -95,3 +95,34 @@ impl Editor {
         }
     }
 }
+
+// Private API
+impl Editor {
+    /// Multiplies the font size of selected text and labels by `factor`,
+    /// rounded to whole sizes (`changeFontSize`), as one undo step. New
+    /// text takes the size too when every changed element ends up equal.
+    pub(super) fn step_font_size(&mut self, factor: f64) {
+        self.finish_text();
+        let before = self.scene.elements.clone();
+        let mut sizes = Vec::new();
+        for (index, _) in self.moving() {
+            let element = &mut self.scene.elements[index];
+            let Kind::Text(text) = &mut element.kind else {
+                continue;
+            };
+            text.font_size = (text.font_size * factor).round();
+            sizes.push(text.font_size);
+            let original = element.original_text().to_owned();
+            element.touch();
+            self.layout_text(index, &original);
+        }
+        if let Some(&size) = sizes.first()
+            && sizes.iter().all(|s| *s == size)
+        {
+            self.style.font_size = size;
+        }
+        if before != self.scene.elements {
+            self.history.record(before);
+        }
+    }
+}

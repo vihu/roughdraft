@@ -27,6 +27,9 @@ use crate::history::History;
 use crate::hit::{self, container_id};
 use crate::scene::{Element, Scene};
 
+/// `1 + FONT_SIZE_RELATIVE_INCREASE_STEP`.
+const FONT_STEP: f64 = 1.1;
+
 /// A scene being edited: selection, active tool, gesture and undo history.
 #[derive(Debug)]
 pub struct Editor {
@@ -125,6 +128,10 @@ pub enum Command {
     Group,
     /// Dissolves the selected groups (Ctrl+Shift+G).
     Ungroup,
+    /// Selected text and labels 10% larger (Ctrl+Shift+>).
+    LargerFont,
+    /// Selected text and labels 10% smaller (Ctrl+Shift+<).
+    SmallerFont,
 }
 
 #[derive(Debug)]
@@ -388,6 +395,8 @@ impl Editor {
             Command::Reorder(order) => self.reorder(order),
             Command::Group => self.group(),
             Command::Ungroup => self.ungroup(),
+            Command::LargerFont => self.step_font_size(FONT_STEP),
+            Command::SmallerFont => self.step_font_size(1.0 / FONT_STEP),
             Command::Nudge(offset) => {
                 if !self.selected.is_empty() {
                     self.history.record(self.scene.elements.clone());

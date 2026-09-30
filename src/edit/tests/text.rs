@@ -164,3 +164,21 @@ fn side_resize_wraps_free_text_and_later_edits_keep_the_width() {
     assert_eq!(text_of(&editor), "hello\nworld\nfoo\nbar");
     assert_eq!(editor.editing().unwrap().base.width, 70.0);
 }
+
+#[test]
+fn font_size_steps_by_ten_percent_rounded() {
+    let mut editor = editor();
+    click(&mut editor, [250.0, 25.0]);
+    let size = |editor: &Editor| match &editor.scene().elements[2].kind {
+        Kind::Text(text) => text.font_size,
+        _ => unreachable!(),
+    };
+    editor.command(Command::LargerFont);
+    editor.command(Command::LargerFont);
+    assert_eq!(size(&editor), 24.0, "20 -> 22 -> round(24.2)");
+    editor.command(Command::SmallerFont);
+    assert_eq!(size(&editor), 22.0, "round(24 / 1.1)");
+    assert_eq!(editor.style().font_size, 22.0);
+    editor.command(Command::Undo);
+    assert_eq!(size(&editor), 24.0);
+}

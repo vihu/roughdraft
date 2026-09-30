@@ -57,6 +57,8 @@ pub struct Sketch {
     images: HashMap<String, iced::widget::image::Handle>,
     /// Canvas size at the last draw, for placing inserted images.
     viewport: std::cell::Cell<iced::Size>,
+    /// A colour being typed in the style panel, until the next click.
+    color_draft: Option<(ui::ColorField, String)>,
 }
 
 /// An element as last rendered.
@@ -89,6 +91,8 @@ enum Input {
     ZoomKey(ZoomKey),
     /// A change from the style panel.
     Style(edit::StyleChange),
+    /// Text typed into a colour field of the style panel.
+    ColorText(ui::ColorField, String),
     /// An edit in the text overlay.
     Text(text_editor::Action),
     FinishText,
@@ -137,6 +141,7 @@ impl Sketch {
             editing: None,
             images: HashMap::new(),
             viewport: std::cell::Cell::new(iced::Size::new(800.0, 600.0)),
+            color_draft: None,
         };
         sketch.refresh();
         sketch.camera.origin = content_origin(sketch.drawings());
@@ -158,6 +163,12 @@ impl Sketch {
     /// Clipboard shortcuts return a task that talks to the system clipboard;
     /// run it (`Task::map` it into your message type).
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        if matches!(
+            message.0,
+            Input::Pointer(Pointer::Down, ..) | Input::Command(_) | Input::Style(_)
+        ) {
+            self.color_draft = None;
+        }
         let task = match message.0 {
             Input::Pointer(pointer, at, modifiers) => {
                 self.editor.pointer(pointer, at, modifiers);
@@ -215,6 +226,15 @@ impl Sketch {
             }
             Input::Style(change) => {
                 self.editor.apply_style(change);
+                Task::none()
+            }
+            Input::ColorText(field, text) => {
+                // Applied as soon as it is a whole hex colour.
+                let css = format!("#{}", text.trim().trim_start_matches('#'));
+                if Rgba::parse(&css).is_some() {
+                    self.editor.apply_style(field.change(css));
+                }
+                self.color_draft = Some((field, text));
                 Task::none()
             }
             Input::FinishText => {
@@ -542,6 +562,9 @@ fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Command> {
             ("d", true) => Some(Command::Duplicate),
             ("a", true) => Some(Command::SelectAll),
             ("g", true) if shift => Some(Command::Ungroup),
+            // `,` and `.` for layouts where Shift does not make `<` and `>`.
+            ("<" | ",", true) if shift => Some(Command::SmallerFont),
+            (">" | ".", true) if shift => Some(Command::LargerFont),
             ("g", true) => Some(Command::Group),
             // Shift turns the brackets into braces on most layouts.
             ("[" | "{", true) if shift => Some(Command::Reorder(Order::ToBack)),
@@ -631,6 +654,14 @@ mod tests {
         assert_eq!(
             shortcut(&Key::Named(Named::ArrowLeft), Modifiers::SHIFT),
             Some(Command::Nudge([-5.0, 0.0]))
+        );
+        assert_eq!(
+            shortcut(&key("<"), ctrl | Modifiers::SHIFT),
+            Some(Command::SmallerFont)
+        );
+        assert_eq!(
+            shortcut(&key("."), ctrl | Modifiers::SHIFT),
+            Some(Command::LargerFont)
         );
     }
 }

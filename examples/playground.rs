@@ -16,7 +16,8 @@
 //! pans, Ctrl+scroll zooms (Ctrl+= / Ctrl+- / Ctrl+0 step and reset,
 //! Shift+1 fits everything, Shift+2 / Shift+3 the selection), Delete, Ctrl+D, Ctrl+A, Ctrl+Z / Ctrl+Shift+Z,
 //! arrow keys nudge, Ctrl+[ / Ctrl+] (with Shift: to back / front) reorder,
-//! Ctrl+G / Ctrl+Shift+G group. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
+//! Ctrl+G / Ctrl+Shift+G group, Ctrl+Shift+< / > text size, Alt+drag
+//! duplicates. Ctrl+C / Ctrl+X / Ctrl+V use Excalidraw's clipboard
 //! format, so shapes paste between this and excalidraw.com; a copied image
 //! pastes as an image. 9 inserts an image file.
 //!
