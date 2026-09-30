@@ -280,8 +280,9 @@ fn our_marks(scene: &Scene) -> Vec<(Affine, Mark)> {
                         },
                     ));
                 }
-                // Excalidraw exports images as <use> of a <symbol>; not compared.
-                Item::Image { .. } => {}
+                // Excalidraw exports images as <use> of a <symbol> and frame
+                // outlines as <rect>; not compared.
+                Item::Image { .. } | Item::Frame { .. } => {}
                 Item::Text(block) => {
                     for (i, line) in block.lines.into_iter().enumerate() {
                         let anchor = match block.align {

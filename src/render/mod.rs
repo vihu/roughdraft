@@ -16,8 +16,11 @@ use crate::color::Rgba;
 use crate::geometry::{Affine, Point};
 use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
+pub(crate) use self::frame::{FRAME_RADIUS, rounded_rect};
+pub use self::frame::{frame_label, frames};
 pub(crate) use self::segment::{segment_length, segment_midpoint};
 
+mod frame;
 mod freedraw;
 mod linear;
 mod segment;
@@ -58,6 +61,17 @@ pub enum Item {
     },
     /// Lines of text.
     Text(TextBlock),
+    /// A frame's outline: a plain rounded rectangle from the origin.
+    Frame {
+        /// Box size.
+        size: [f64; 2],
+        /// Corner radius.
+        radius: f64,
+        /// Color.
+        color: Rgba,
+        /// Line width.
+        width: f64,
+    },
     /// A picture filling the element's box.
     Image {
         /// Key into the scene's `files`.
@@ -136,13 +150,18 @@ pub enum Align {
 
 /// Returns drawings for every visible element, in Excalidraw's draw order.
 ///
-/// Types this version does not draw yet (freedraw, frame, embeds) are
-/// skipped.
+/// A frame's title ([`frame_label`]) comes right before its outline.
+/// Types this version does not draw (embeds, images without a file) are
+/// skipped. Clipping frame children is the caller's ([`frames`]).
 pub fn render(scene: &Scene) -> Vec<Drawing> {
     let background = scene.background_color();
     draw_order(scene)
         .into_iter()
-        .filter_map(|element| render_element(element, background))
+        .flat_map(|element| {
+            frame_label(element)
+                .into_iter()
+                .chain(render_element(element, background))
+        })
         .collect()
 }
 
@@ -173,7 +192,8 @@ pub fn draw_order(scene: &Scene) -> Vec<&Element> {
 
 /// Draws one element; `background` is the canvas color, used by outlined
 /// arrowheads. Returns `None` for types this version does not draw
-/// (frames, embeds, images without a file).
+/// (embeds, images without a file). A frame draws its outline only; its
+/// title is [`frame_label`].
 pub fn render_element(element: &Element, background: &str) -> Option<Drawing> {
     draw(element, background)
 }
@@ -193,6 +213,9 @@ const CARTOONIST: f64 = 2.0;
 const LINE_CONFIRM_THRESHOLD: f64 = 8.0;
 
 fn draw(element: &Element, background: &str) -> Option<Drawing> {
+    if element.frame_title().is_some() {
+        return Some(frame::outline(element));
+    }
     let base = &element.base;
     let opacity = (base.opacity / 100.0) as f32;
     let generator = Generator::default();
@@ -453,71 +476,4 @@ fn color(css: &str, opacity: f32) -> Rgba {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Align, Item, render};
-    use crate::scene::Scene;
-
-    const BASE: &str = r##""x":100,"y":50,"width":120,"height":60,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"roundness":null,"seed":1968410193,"isDeleted":false"##;
-
-    fn scene(elements: &[String]) -> Scene {
-        let json = format!(
-            r#"{{"type":"excalidraw","elements":[{}]}}"#,
-            elements.join(",")
-        );
-        serde_json::from_str(&json).unwrap()
-    }
-
-    fn text(id: &str, container: &str) -> String {
-        format!(
-            r#"{{"id":"{id}","type":"text",{BASE},"text":"a\nb","fontSize":20,"fontFamily":5,"textAlign":"center","verticalAlign":"middle","lineHeight":1.25,"containerId":{container}}}"#
-        )
-    }
-
-    #[test]
-    fn labels_follow_their_container_and_deleted_are_skipped() {
-        let rect = format!(r#"{{"id":"box","type":"rectangle",{BASE}}}"#);
-        let deleted = format!(r#"{{"id":"gone","type":"ellipse",{BASE}}}"#)
-            .replace(r#""isDeleted":false"#, r#""isDeleted":true"#);
-        let label = text("label", r#""box""#);
-        let free = text("free", "null");
-        // Label listed first, container second: label must still draw after it.
-        let drawings = render(&scene(&[label, deleted, free, rect]));
-        let kinds: Vec<&str> = drawings
-            .iter()
-            .map(|d| match &d.items[0] {
-                Item::Text(t) if t.x == 60.0 => "text",
-                _ => "shape",
-            })
-            .collect();
-        assert_eq!(kinds, ["text", "shape", "text"]);
-    }
-
-    #[test]
-    fn text_uses_excalidraw_baseline() {
-        let drawings = render(&scene(&[text("t", "null")]));
-        let Item::Text(block) = &drawings[0].items[0] else {
-            panic!("expected text");
-        };
-        assert_eq!(block.lines, ["a", "b"]);
-        assert_eq!(block.align, Align::Middle);
-        assert_eq!(block.line_height, 25.0);
-        // Excalifont at 20px: ascent 17.72, descent 7.48, centered in 25px.
-        assert!((block.baseline - 17.62).abs() < 1e-9, "{}", block.baseline);
-        assert_eq!(drawings[0].transform.apply([0.0, 0.0]), [100.0, 50.0]);
-    }
-
-    #[test]
-    fn arrow_gets_shaft_and_two_head_strokes() {
-        let arrow = format!(
-            r#"{{"id":"a","type":"arrow",{BASE},"points":[[0,0],[120,60]],"startArrowhead":null,"endArrowhead":"arrow"}}"#
-        );
-        let drawings = render(&scene(&[arrow]));
-        let strokes = drawings[0]
-            .items
-            .iter()
-            .filter(|i| matches!(i, Item::Stroke { .. }))
-            .count();
-        // Shaft: one stroke set; each head line: one stroke set.
-        assert_eq!(strokes, 3);
-    }
-}
+mod tests;

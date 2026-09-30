@@ -373,6 +373,27 @@ impl Element {
         }
     }
 
+    /// Returns the id of the frame the element belongs to (`frameId`).
+    pub fn frame_id(&self) -> Option<&str> {
+        self.json.get("frameId").and_then(Value::as_str)
+    }
+
+    /// Returns a frame's title (`getFrameLikeTitle`): its `name`, or
+    /// "Frame" / "AI Frame" when it has none. `None` for other elements.
+    pub fn frame_title(&self) -> Option<&str> {
+        let default = match &self.kind {
+            Kind::Other(kind) if kind == "frame" => "Frame",
+            Kind::Other(kind) if kind == "magicframe" => "AI Frame",
+            _ => return None,
+        };
+        Some(
+            self.json
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or(default),
+        )
+    }
+
     /// Whether the element is locked (`locked`): drawn, but not selectable
     /// by clicking, box selection or select all.
     pub fn is_locked(&self) -> bool {

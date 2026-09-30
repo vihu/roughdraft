@@ -6,6 +6,7 @@
 mod camera;
 mod icons;
 mod keys;
+mod layers;
 mod overlay;
 mod paint;
 mod picture;
@@ -15,7 +16,7 @@ mod ui;
 
 use std::collections::HashMap;
 
-use iced::widget::canvas::{self, Canvas, Frame};
+use iced::widget::canvas::{self, Canvas};
 use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
@@ -24,7 +25,7 @@ use picture::{Picture, decode_image, encode_png};
 
 use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Pointer};
-use crate::geometry::{self, Affine, Bounds};
+use crate::geometry::{self, Bounds};
 use crate::render::{self, Drawing, Item, Segment};
 use crate::scene::Scene;
 
@@ -74,6 +75,10 @@ struct Rendered {
     revision: (i64, i64),
     /// `None` for types not drawn yet.
     drawing: Option<Drawing>,
+    /// A frame's title, drawn before its outline.
+    label: Option<Drawing>,
+    /// The frame this element is clipped to, if any (`frameId`).
+    frame: Option<String>,
     /// Box to cull against: the element's bounds plus [`CULL_MARGIN`].
     extent: Bounds,
 }
@@ -363,6 +368,8 @@ impl Sketch {
                     Rendered {
                         revision,
                         drawing: render::render_element(element, background),
+                        label: render::frame_label(element),
+                        frame: element.frame_id().map(String::from),
                         extent: [
                             x1 - CULL_MARGIN,
                             y1 - CULL_MARGIN,
@@ -455,49 +462,6 @@ impl Sketch {
         };
         Color { r, g, b, a }
     }
-
-    fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
-        // Only what is in view, like Excalidraw's `getVisibleCanvasElements`.
-        let camera = self.camera.get();
-        let [ox, oy] = camera.origin;
-        let size = frame.size();
-        let (x2, y2) = (
-            ox + f64::from(size.width) / camera.zoom,
-            oy + f64::from(size.height) / camera.zoom,
-        );
-        let visible = |[a, b, c, d]: Bounds| a <= x2 && b <= y2 && c >= ox && d >= oy;
-        // The element being typed is shown by the text overlay instead.
-        let shown = ids.iter().filter(|id| self.editing.as_ref() != Some(*id));
-        let erasing = self.editor.pending_erasure();
-        let drawings = shown
-            .map(|id| (id, &self.drawings[id]))
-            .filter(|(_, rendered)| visible(rendered.extent))
-            .filter_map(|(id, rendered)| Some((id, rendered.drawing.as_ref()?)));
-        for (id, drawing) in drawings {
-            // `ELEMENT_READY_TO_ERASE_OPACITY`: 20%.
-            let fade = if erasing.is_some_and(|marked| marked.contains(id)) {
-                0.2
-            } else {
-                1.0
-            };
-            let transform = drawing.transform.then(view);
-            for item in &drawing.items {
-                match item {
-                    Item::Image {
-                        file_id,
-                        size,
-                        opacity,
-                        crop,
-                        flip,
-                    } => {
-                        let picture = Picture::of(file_id, crop.as_ref(), *flip);
-                        self.draw_image(frame, &picture, *size, *opacity * fade, transform);
-                    }
-                    _ => paint::draw_item(frame, item, transform, &|c| self.paint(c.fade(fade))),
-                }
-            }
-        }
-    }
 }
 
 fn write_clipboard(json: Option<String>) -> Task<Message> {
@@ -519,7 +483,7 @@ fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
                     })
                     .collect(),
                 Item::Text(_) => vec![[0.0, 0.0]],
-                Item::Image { size, .. } => vec![[0.0, 0.0], *size],
+                Item::Image { size, .. } | Item::Frame { size, .. } => vec![[0.0, 0.0], *size],
             };
             for p in points {
                 let [x, y] = drawing.transform.apply(p);

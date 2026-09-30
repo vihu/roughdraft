@@ -222,7 +222,12 @@ impl canvas::Program<Message> for Sketch {
         };
 
         let below = self.below.draw(renderer, size, |frame| {
-            frame.fill_rectangle(Point::ORIGIN, frame.size(), self.paint(self.background));
+            // Through a clip draft like the elements (`draw_ids`), or wgpu
+            // would put it over them.
+            let full = iced::Rectangle::with_size(frame.size());
+            frame.with_clip(full, |frame| {
+                frame.fill_rectangle(Point::ORIGIN, frame.size(), self.paint(self.background));
+            });
             self.draw_ids(frame, below, view);
         });
         let mut dynamic = Frame::new(renderer, size);

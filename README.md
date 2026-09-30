@@ -92,8 +92,10 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 
 Freedraw strokes made in Excalidraw are drawn (with perfect-freehand, exactly
 like Excalidraw) and can be selected, moved, resized and erased; there is no
-pen tool yet. Not supported: frames, embeds, laser, elbow arrow routing (drawn
-as polylines), editing an image's crop, snapping, collaboration. Elements of these types are
+pen tool yet. Frames are drawn (outline, title, children cut off at the
+frame) but not edited as frames: they cannot be clicked, drawn, or moved
+with their children. Not supported: embeds, laser, elbow arrow routing
+(drawn as polylines), editing an image's crop, snapping, collaboration. Elements of these types are
 kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
 bundled and render in the system sans or monospace font.
 

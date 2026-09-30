@@ -1,11 +1,12 @@
 //! Scene to SVG, shaped like Excalidraw's `exportToSvg`: a background, one
 //! group per element with its rough paths (coordinates to 2 decimals) and
-//! text lines. This is the preview Keeprs stores next to each sketch.
+//! text lines, frame titles and outlines, and frame children clipped to
+//! their frame. This is the preview Keeprs stores next to each sketch.
 use std::fmt::Write as _;
 
 use crate::color::Rgba;
-use crate::geometry::Affine;
-use crate::render::{self, Align, FillRule, Item, Segment};
+use crate::geometry::{self, Affine};
+use crate::render::{self, Align, Drawing, FillRule, Item, Segment};
 use crate::scene::{Kind, Scene};
 
 /// How to export.
@@ -37,14 +38,29 @@ impl Default for SvgOptions {
 /// `THEME_FILTER`.
 const DARK_FILTER: &str = "invert(93%) hue-rotate(180deg)";
 
+/// Frame title color in a dark export (`nameColorDarkTheme`), before the
+/// dark filter.
+const DARK_FRAME_TITLE: Rgba = Rgba::rgb(
+    0x7a as f32 / 255.0,
+    0x7a as f32 / 255.0,
+    0x7a as f32 / 255.0,
+);
+
 /// Returns the scene as an SVG document.
 pub fn export(scene: &Scene, options: &SvgOptions) -> String {
     let elements = render::draw_order(scene);
-    let [x1, y1, x2, y2] = if elements.is_empty() {
+    let frames = render::frames(scene);
+    let [mut x1, mut y1, x2, y2] = if elements.is_empty() {
         [0.0, 0.0, 0.0, 0.0]
     } else {
         crate::edit::common_bounds(elements.iter().copied())
     };
+    // Frame titles sit above their frames and count as content.
+    // ponytail: only the title's top-left, its measured width is not known
+    for label in elements.iter().filter_map(|e| render::frame_label(e)) {
+        let [x, y] = label.transform.apply([0.0, 0.0]);
+        (x1, y1) = (x1.min(x), y1.min(y));
+    }
     let pad = options.padding;
     let (width, height) = (x2 - x1 + 2.0 * pad, y2 - y1 + 2.0 * pad);
     let shift = Affine::translate([pad - x1, pad - y1]);
@@ -61,6 +77,30 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
         w = num(width),
         h = num(height),
     );
+    svg.push_str("<defs>");
+    // One clip path per frame, its rounded box (`exportToSvg`).
+    for frame in elements
+        .iter()
+        .filter(|e| frames.contains_key(e.base.id.as_str()))
+    {
+        let [a, b, c, d, e, f] = geometry::element_transform(frame)
+            .then(shift)
+            .coefficients();
+        let _ = write!(
+            svg,
+            r#"<clipPath id="{}"><rect ry="{r}" rx="{r}" height="{}" width="{}" transform="matrix({} {} {} {} {} {})"/></clipPath>"#,
+            escape(&frame.base.id),
+            num(frame.base.height),
+            num(frame.base.width),
+            num(a),
+            num(b),
+            num(c),
+            num(d),
+            num(e),
+            num(f),
+            r = num(render::FRAME_RADIUS),
+        );
+    }
     if options.embed_fonts {
         let used: std::collections::BTreeSet<u32> = elements
             .iter()
@@ -69,7 +109,7 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
                 _ => None,
             })
             .collect();
-        svg.push_str(r#"<defs><style class="style-fonts">"#);
+        svg.push_str(r#"<style class="style-fonts">"#);
         for id in used {
             let Some(font) = crate::fonts::for_family(id) else {
                 continue;
@@ -81,8 +121,9 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
                 "@font-face {{ font-family: {name}; src: url(data:font/ttf;base64,{font}); }}"
             );
         }
-        svg.push_str("</style></defs>");
+        svg.push_str("</style>");
     }
+    svg.push_str("</defs>");
     if options.background {
         let background = Rgba::parse(scene.background_color()).unwrap_or(Rgba::WHITE);
         let _ = write!(
@@ -95,27 +136,46 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
     }
     let background = scene.background_color();
     for element in elements {
-        let Some(drawing) = render::render_element(element, background) else {
-            continue;
-        };
-        let [a, b, c, d, e, f] = drawing.transform.then(shift).coefficients();
-        let _ = write!(
-            svg,
-            r#"<g transform="matrix({} {} {} {} {} {})" stroke-linecap="round">"#,
-            num(a),
-            num(b),
-            num(c),
-            num(d),
-            num(e),
-            num(f)
-        );
-        for item in &drawing.items {
-            write_item(&mut svg, item, scene);
+        let clip = element.frame_id().filter(|id| frames.contains_key(id));
+        if let Some(id) = clip {
+            let _ = write!(svg, r#"<g clip-path="url(#{})">"#, escape(id));
         }
-        svg.push_str("</g>");
+        if let Some(mut label) = render::frame_label(element) {
+            for item in &mut label.items {
+                if let (Item::Text(block), true) = (item, options.dark) {
+                    block.color = DARK_FRAME_TITLE;
+                }
+            }
+            write_drawing(&mut svg, &label, shift, scene);
+        }
+        if let Some(drawing) = render::render_element(element, background) {
+            write_drawing(&mut svg, &drawing, shift, scene);
+        }
+        if clip.is_some() {
+            svg.push_str("</g>");
+        }
     }
     svg.push_str("</svg>");
     svg
+}
+
+/// Writes one drawing as a group moved by `shift`.
+fn write_drawing(svg: &mut String, drawing: &Drawing, shift: Affine, scene: &Scene) {
+    let [a, b, c, d, e, f] = drawing.transform.then(shift).coefficients();
+    let _ = write!(
+        svg,
+        r#"<g transform="matrix({} {} {} {} {} {})" stroke-linecap="round">"#,
+        num(a),
+        num(b),
+        num(c),
+        num(d),
+        num(e),
+        num(f)
+    );
+    for item in &drawing.items {
+        write_item(svg, item, scene);
+    }
+    svg.push_str("</g>");
 }
 
 fn write_item(svg: &mut String, item: &Item, scene: &Scene) {
@@ -140,6 +200,23 @@ fn write_item(svg: &mut String, item: &Item, scene: &Scene) {
                 let _ = write!(svg, r#" stroke-dasharray="{}""#, dash.join(" "));
             }
             let _ = write!(svg, r#" d="{}"/>"#, path_data(path));
+        }
+        // A plain `<rect>`, like Excalidraw's frame outline.
+        Item::Frame {
+            size: [w, h],
+            radius,
+            color,
+            width,
+        } => {
+            let _ = write!(
+                svg,
+                r#"<rect stroke-width="{}" stroke="{}" fill="none" ry="{r}" rx="{r}" height="{}" width="{}"/>"#,
+                num(*width),
+                hex(*color),
+                num(*h),
+                num(*w),
+                r = num(*radius),
+            );
         }
         Item::Fill { path, color, rule } => {
             let _ = write!(svg, r#"<path stroke="none" fill="{}""#, hex(*color));

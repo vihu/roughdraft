@@ -1,35 +1,55 @@
 //! Text elements as positioned lines, with Excalidraw's per-font vertical
 //! metrics (`fonts/FontMetadata.ts`).
 use super::{Align, TextBlock, color};
+use crate::color::Rgba;
 use crate::scene::{Element, Text, TextAlign};
 
 pub(super) fn text_block(element: &Element, text: &Text, opacity: f32) -> TextBlock {
-    let line_height = text.font_size * text.line_height;
-    // `getVerticalOffset`: center the font's ascent + descent in the line.
-    let metrics = font_metrics(text.font_family);
-    let em = text.font_size / metrics.units_per_em;
-    let gap = (line_height - em * metrics.ascender + em * metrics.descender) / 2.0;
     let (x, align) = match text.text_align {
         TextAlign::Center => (element.base.width / 2.0, Align::Middle),
         TextAlign::Right => (element.base.width, Align::End),
         // ponytail: RTL lines anchor at the start, Excalidraw anchors them at the end
         TextAlign::Left | TextAlign::Other(_) => (0.0, Align::Start),
     };
+    let mut block = left_block(
+        &text.text,
+        text.font_family,
+        text.font_size,
+        text.line_height,
+        color(&element.base.stroke_color, opacity),
+    );
+    block.x = x;
+    block.align = align;
+    block
+}
+
+/// Left-aligned lines of `text` laid out like a text element.
+pub(super) fn left_block(
+    text: &str,
+    font_family: u32,
+    font_size: f64,
+    line_height: f64,
+    color: Rgba,
+) -> TextBlock {
+    let line_height = font_size * line_height;
+    // `getVerticalOffset`: center the font's ascent + descent in the line.
+    let metrics = font_metrics(font_family);
+    let em = font_size / metrics.units_per_em;
+    let gap = (line_height - em * metrics.ascender + em * metrics.descender) / 2.0;
     TextBlock {
         lines: text
-            .text
             .replace("\r\n", "\n")
             .replace('\r', "\n")
             .split('\n')
             .map(String::from)
             .collect(),
-        x,
+        x: 0.0,
         line_height,
         baseline: em * metrics.ascender + gap,
-        align,
-        font_family: text.font_family,
-        font_size: text.font_size,
-        color: color(&element.base.stroke_color, opacity),
+        align: Align::Start,
+        font_family,
+        font_size,
+        color,
     }
 }
 

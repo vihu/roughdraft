@@ -53,6 +53,22 @@ pub(super) fn draw_item(
             let style = Style::Solid(paint(*color));
             frame.fill(&to_path(path, transform), Fill { style, rule });
         }
+        // Excalidraw's editor keeps the outline 2 px wide with 8 px corners
+        // on screen at any zoom.
+        Item::Frame {
+            size,
+            radius,
+            color,
+            width,
+        } => {
+            let stroke = Item::Stroke {
+                path: crate::render::rounded_rect(*size, radius / scale),
+                color: *color,
+                width: width / scale,
+                dash: None,
+            };
+            draw_item(frame, &stroke, transform, paint);
+        }
         Item::Text(block) => draw_text(frame, block, transform, paint),
         // Drawn by `Sketch::draw_ids`, which holds the decoded images.
         Item::Image { .. } => {}
