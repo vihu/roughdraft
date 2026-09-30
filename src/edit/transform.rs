@@ -277,7 +277,7 @@ impl Editor {
                 {
                     self.resize_one(&start, &frame, handle, at, offset, modifiers);
                 } else {
-                    self.resize_many(&start, &frame, handle, at, modifiers);
+                    self.resize_many(&start, &frame, handle, at, offset, modifiers);
                 }
                 self.update_bound_arrows(&ids(&start));
                 self.gesture = Some(Gesture::Resize {

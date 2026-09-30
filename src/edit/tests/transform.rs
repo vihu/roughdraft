@@ -173,3 +173,21 @@ fn two_point_arrows_drag_their_endpoints() {
     assert_eq!((arrow.base.x, arrow.base.y), (120.0, 10.0));
     assert_eq!(line.points, [[0.0, 0.0], [80.0, 40.0]]);
 }
+
+#[test]
+fn uniform_multi_resize_scales_label_fonts() {
+    let mut editor = editor();
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], SHIFT);
+    let se = handle(&editor, Handle::Se);
+    // Common box 0..300 x 0..50; Shift doubles it.
+    drag(&mut editor, se, by(se, [300.0, 50.0]), SHIFT);
+    assert_eq!(box_of(&editor, 1), (400.0, 0.0, 200.0, 100.0));
+    let label = &editor.scene().elements[2];
+    let Kind::Text(text) = &label.kind else {
+        panic!("label")
+    };
+    assert_eq!(text.font_size, 40.0);
+    // "hi" at 40: 44 x 50, centred in b.
+    assert_eq!((label.base.x, label.base.y), (478.0, 25.0));
+}

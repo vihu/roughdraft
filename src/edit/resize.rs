@@ -64,15 +64,20 @@ impl Editor {
 
     /// Scales several elements about the opposite side or corner of their
     /// common box (its centre with Alt). Uniform with Shift, or when any
-    /// element is rotated or text.
+    /// element is rotated, text or grouped; uniform scaling scales label
+    /// fonts too. Labels re-wrap and their shapes grow to fit.
     pub(super) fn resize_many(
         &mut self,
         start: &[(usize, Element)],
         frame: &Frame,
         handle: Handle,
         at: Point,
+        offset: Point,
         modifiers: Modifiers,
     ) {
+        // Where the dragged edge would be, not the pointer on the handle
+        // (`pointerDownState.resize.offset`).
+        let at = [at[0] - offset[0], at[1] - offset[1]];
         let [x1, y1, x2, y2] = frame.bounds;
         let (moves_left, moves_right, moves_top, moves_bottom) = edges(handle);
         let center = [(x1 + x2) / 2.0, (y1 + y2) / 2.0];
@@ -107,6 +112,7 @@ impl Editor {
             || start.iter().any(|(_, e)| {
                 e.base.angle != 0.0
                     || (matches!(e.kind, Kind::Text(_)) && container_id(e).is_none())
+                    || !e.group_ids().is_empty()
             });
         if uniform {
             let side = matches!(handle, Handle::N | Handle::S | Handle::W | Handle::E);
@@ -158,7 +164,17 @@ impl Editor {
             self.scene.elements[*index] = resized;
             self.scene.elements[*index].touch();
         }
-        self.sync_labels(start);
+        let from_top = matches!(handle, Handle::N | Handle::Nw | Handle::Ne);
+        for (label, original) in start.iter().filter(|(_, e)| container_id(e).is_some()) {
+            if let (true, Kind::Text(from), Kind::Text(to)) = (
+                uniform,
+                &original.kind,
+                &mut self.scene.elements[*label].kind,
+            ) {
+                to.font_size = from.font_size * sx.abs();
+            }
+            self.rewrap_label(*label, from_top);
+        }
     }
 
     /// Rotates the selection: one element about its centre, several about
