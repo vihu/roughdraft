@@ -4,7 +4,7 @@
 //! (filled, labelled, or text) hit anywhere inside; the rest only within the
 //! threshold of their outline.
 use crate::geometry::{self, Point};
-use crate::render::is_transparent;
+use crate::render::{Item, Segment, is_transparent};
 use crate::scene::{Element, Kind, Scene};
 
 /// Screen pixels around an outline that still hit it
@@ -78,18 +78,69 @@ fn hits(element: &Element, labelled: bool, at: Point, threshold: f64) -> bool {
             threshold,
             from_inside,
         ),
-        // ponytail: straight segments between points, Excalidraw samples the rough curve; differs on curved lines
-        Kind::Line(line) => {
-            let loop_ = crate::render::is_loop(&line.points);
-            polygon_hit(&line.points, false, p, threshold, from_inside && loop_)
+        Kind::Line(line) | Kind::Arrow(line) => {
+            let is_line = matches!(element.kind, Kind::Line(_));
+            let inside = is_line && from_inside && crate::render::is_loop(&line.points);
+            if inside && contains(&line.points, p) {
+                return true;
+            }
+            // Round lines through 3+ points bend away from their points'
+            // chords: test the drawn curve, like Excalidraw's `getCurveShape`.
+            if line.points.len() > 2 && element.base.roundness.is_some() {
+                curve(element)
+                    .iter()
+                    .any(|stroke| polygon_hit(stroke, false, p, threshold, false))
+            } else {
+                polygon_hit(&line.points, false, p, threshold, false)
+            }
         }
-        Kind::Arrow(line) => polygon_hit(&line.points, false, p, threshold, false),
         Kind::Other(kind) if kind == "image" => {
             let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]];
             polygon_hit(&corners, true, p, threshold, true)
         }
         Kind::Other(_) => false,
     }
+}
+
+/// The line's drawn stroke (rough curve, arrowheads left out) as polylines,
+/// one per pass, in the element's local coordinates.
+fn curve(element: &Element) -> Vec<Vec<Point>> {
+    /// Samples per cubic segment.
+    const STEPS: usize = 8;
+
+    let Some(drawing) = crate::render::render_element(element, "#ffffff") else {
+        return Vec::new();
+    };
+    let Some(Item::Stroke { path, .. }) = drawing.items.first() else {
+        return Vec::new();
+    };
+    let mut strokes: Vec<Vec<Point>> = Vec::new();
+    let mut last = [0.0, 0.0];
+    for segment in path {
+        match *segment {
+            Segment::MoveTo(p) => strokes.push(vec![p]),
+            Segment::LineTo(p) => strokes.last_mut().into_iter().for_each(|s| s.push(p)),
+            Segment::CubicTo(c1, c2, p) => {
+                let from = last;
+                let points = (1..=STEPS).map(|i| {
+                    let t = i as f64 / STEPS as f64;
+                    let u = 1.0 - t;
+                    let [a, b, c, d] = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+                    [
+                        a * from[0] + b * c1[0] + c * c2[0] + d * p[0],
+                        a * from[1] + b * c1[1] + c * c2[1] + d * p[1],
+                    ]
+                });
+                if let Some(stroke) = strokes.last_mut() {
+                    stroke.extend(points);
+                }
+            }
+        }
+        last = match *segment {
+            Segment::MoveTo(p) | Segment::LineTo(p) | Segment::CubicTo(_, _, p) => p,
+        };
+    }
+    strokes
 }
 
 fn polygon_hit(
@@ -223,5 +274,29 @@ mod tests {
             Some("box"),
             "labelled box hits inside"
         );
+    }
+
+    #[test]
+    fn round_lines_hit_on_their_curve_not_their_chords() {
+        let line = r##"{"id":"l","type":"line","x":0,"y":0,"width":200,"height":100,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":{"type":2},"roughness":0,"opacity":100,"seed":1,"isDeleted":false,"points":[[0,0],[100,100],[200,0]]}"##;
+        let scene = scene(&[line.to_owned()]);
+        let element = &scene.elements[0];
+        let chords = [[0.0, 0.0], [100.0, 100.0], [200.0, 0.0]];
+        let off_chord = |p: &[f64; 2]| {
+            chords
+                .windows(2)
+                .map(|w| super::segment_distance(*p, w[0], w[1]))
+                .fold(f64::INFINITY, f64::min)
+        };
+        let bulge = super::curve(element)
+            .into_iter()
+            .flatten()
+            .max_by(|a, b| off_chord(a).total_cmp(&off_chord(b)))
+            .unwrap();
+        assert!(
+            off_chord(&bulge) > 8.0,
+            "the curve leaves the chords: {bulge:?}"
+        );
+        assert_eq!(at(&scene, bulge), Some("l"));
     }
 }
