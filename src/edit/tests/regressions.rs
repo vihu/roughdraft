@@ -313,3 +313,86 @@ fn arrows_bind_inside_solid_filled_shapes_but_never_to_locked_ones() {
     let arrow = editor.scene().elements.len() - 1;
     assert_eq!(end_binding(&editor, arrow), None, "a is locked");
 }
+
+/// `x` at 0, then `g1` at 200 and `g2` at 400 in group `G`; all filled,
+/// 100 x 50.
+fn grouped() -> Editor {
+    let shape = |id: &str, x: u32, groups: &str| {
+        format!(
+            r##"{{"id":"{id}","type":"rectangle","x":{x},"y":0,"width":100,"height":50,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null,"groupIds":[{groups}]}}"##
+        )
+    };
+    let json = format!(
+        r#"{{"type":"excalidraw","elements":[{},{},{}]}}"#,
+        shape("x", 0, ""),
+        shape("g1", 200, r#""G""#),
+        shape("g2", 400, r#""G""#)
+    );
+    Editor::new(serde_json::from_str::<Scene>(&json).unwrap())
+}
+
+fn order(editor: &Editor) -> Vec<String> {
+    editor
+        .scene()
+        .elements
+        .iter()
+        .map(|e| e.base.id.clone())
+        .collect()
+}
+
+#[test]
+fn groups_move_duplicate_and_select_as_excalidraw_does() {
+    // Bring forward passes the whole group.
+    let mut editor = grouped();
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    editor.command(Command::Reorder(crate::edit::Order::Forward));
+    assert_eq!(order(&editor), ["g1", "g2", "x"]);
+
+    // A duplicated group's copies stay together after it.
+    let mut editor = grouped();
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], NONE);
+    assert!(editor.is_selected("g1") && editor.is_selected("g2"));
+    editor.command(Command::Duplicate);
+    let ids = order(&editor);
+    assert_eq!(&ids[..3], ["x", "g1", "g2"]);
+    assert!(
+        ids[3..]
+            .iter()
+            .all(|id| !["x", "g1", "g2"].contains(&id.as_str()))
+    );
+
+    // A copy made inside an entered group stays in it.
+    let mut editor = grouped();
+    editor.double_click([250.0, 25.0]);
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], NONE);
+    assert!(editor.is_selected("g1") && !editor.is_selected("g2"));
+    editor.command(Command::Duplicate);
+    let copy = editor.selection().next().unwrap();
+    assert_eq!(copy.group_ids(), ["G"]);
+
+    // Select all leaves the entered group, so a new group takes everything.
+    let mut editor = grouped();
+    editor.double_click([250.0, 25.0]);
+    editor.command(Command::SelectAll);
+    editor.command(Command::Group);
+    drag(&mut editor, [600.0, 300.0], [600.0, 300.0], NONE);
+    drag(&mut editor, [250.0, 25.0], [250.0, 25.0], NONE);
+    assert!(editor.is_selected("x"), "one group of all three");
+}
+
+#[test]
+fn the_text_tool_edits_free_text_it_clicks() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [0.0, 0.0], [0.0, 0.0], NONE);
+    editor.set_text("hi");
+    editor.finish_text();
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [5.0, 10.0], [5.0, 10.0], NONE);
+    let editing = editor.editing().map(|e| e.base.id.clone());
+    assert_eq!(
+        editing.as_deref(),
+        Some(editor.scene().elements[0].base.id.as_str())
+    );
+    assert_eq!(editor.scene().elements.len(), 1);
+}

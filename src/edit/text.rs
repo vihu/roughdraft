@@ -277,9 +277,11 @@ impl Editor {
     /// within 30 units), else start free text.
     pub(super) fn text_press(&mut self, at: Point) {
         self.finish_text();
+        // Free text under the click is edited (`getTextElementAtPosition`),
+        // else a shape takes a label.
         let container = self
             .hit(at)
-            .filter(|e| is_container(e))
+            .filter(|e| is_container(e) || matches!(e.kind, Kind::Text(_)))
             .or_else(|| {
                 self.scene
                     .elements

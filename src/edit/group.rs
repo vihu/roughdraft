@@ -2,7 +2,7 @@
 //! `groups.ts`). An element's `groupIds` run innermost first; selecting one
 //! member selects its outermost group, or the next group inside the one
 //! entered with a double-click.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{Editor, common_bounds};
 use crate::geometry::Bounds;
@@ -130,6 +130,30 @@ impl Editor {
             None => groups.len(),
         };
         limit.checked_sub(1).map(|i| groups[i].to_owned())
+    }
+
+    /// Group ids copies keep (`getNewGroupIdsForDuplication`): the entered
+    /// group and the groups around it, mapped to themselves; groups inside
+    /// it get new ids.
+    pub(super) fn kept_groups(&self) -> HashMap<String, String> {
+        let Some(entered) = &self.editing_group else {
+            return HashMap::new();
+        };
+        self.scene
+            .elements
+            .iter()
+            .flat_map(|e| {
+                let groups = e.group_ids();
+                let from = groups.iter().position(|g| g == entered);
+                from.map(|p| {
+                    groups[p..]
+                        .iter()
+                        .map(|g| (g.to_string(), g.to_string()))
+                        .collect()
+                })
+                .unwrap_or_else(Vec::new)
+            })
+            .collect()
     }
 
     /// Live, non-label elements in `group`.

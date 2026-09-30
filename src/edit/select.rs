@@ -117,7 +117,7 @@ impl Editor {
             .iter()
             .map(|(i, _)| (self.scene.elements[*i].base.id.clone(), crate::random::id()))
             .collect();
-        let mut groups = HashMap::new();
+        let mut groups = self.kept_groups();
         let copies: Vec<Element> = starts
             .iter()
             .map(|(i, _)| {

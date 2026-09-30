@@ -23,6 +23,8 @@ struct Unit {
     elements: Vec<Element>,
     selected: bool,
     visible: bool,
+    /// The top-level element's `groupIds`, innermost first.
+    groups: Vec<String>,
 }
 
 impl Editor {
@@ -36,8 +38,8 @@ impl Editor {
         match order {
             Order::ToFront => units.sort_by_key(|u| u.selected),
             Order::ToBack => units.sort_by_key(|u| !u.selected),
-            Order::Forward => step(&mut units, Direction::Up),
-            Order::Backward => step(&mut units, Direction::Down),
+            Order::Forward => step(&mut units, Direction::Up, self.editing_group.as_deref()),
+            Order::Backward => step(&mut units, Direction::Down, self.editing_group.as_deref()),
         }
         self.scene.elements = units.into_iter().flat_map(|u| u.elements).collect();
         if before != self.scene.elements {
@@ -61,6 +63,7 @@ impl Editor {
                     elements: std::iter::once(owner.clone()).chain(labels).collect(),
                     selected: self.selected.contains(&owner.base.id),
                     visible: !owner.base.is_deleted,
+                    groups: owner.group_ids().into_iter().map(String::from).collect(),
                 }
             })
             .collect()
@@ -75,8 +78,10 @@ enum Direction {
 
 /// Moves every selected unit one visible, unselected unit up or down,
 /// keeping selected runs together. Processing from the moving end first
-/// lets a whole run pass the same neighbour.
-fn step(units: &mut Vec<Unit>, direction: Direction) {
+/// lets a whole run pass the same neighbour. A neighbour in a group is
+/// passed as a whole, and nothing leaves the entered group
+/// (`getTargetIndex`).
+fn step(units: &mut Vec<Unit>, direction: Direction, entered: Option<&str>) {
     let order: Vec<usize> = match direction {
         Direction::Up => (0..units.len()).rev().collect(),
         Direction::Down => (0..units.len()).collect(),
@@ -89,9 +94,26 @@ fn step(units: &mut Vec<Unit>, direction: Direction) {
             Direction::Up => (start + 1..units.len()).find(|&i| units[i].visible),
             Direction::Down => (0..start).rev().find(|&i| units[i].visible),
         };
-        let Some(target) = next.filter(|&i| !units[i].selected) else {
+        let Some(mut target) = next.filter(|&i| !units[i].selected) else {
             continue;
         };
+        let groups = &units[target].groups;
+        let sibling = match entered {
+            Some(entered) => match groups.iter().position(|g| g == entered) {
+                Some(at) => at.checked_sub(1).map(|i| groups[i].clone()),
+                // The neighbour is outside the entered group.
+                None => continue,
+            },
+            None => groups.last().cloned(),
+        };
+        if let Some(group) = sibling {
+            let mut members = (0..units.len()).filter(|&i| units[i].groups.contains(&group));
+            let edge = match direction {
+                Direction::Up => members.next_back(),
+                Direction::Down => members.next(),
+            };
+            target = edge.unwrap_or(target);
+        }
         let unit = units.remove(start);
         units.insert(target, unit);
     }

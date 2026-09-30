@@ -76,6 +76,7 @@ impl Editor {
             Command::Delete => self.delete(),
             Command::Duplicate => self.duplicate(),
             Command::SelectAll => {
+                self.editing_group = None;
                 self.selected = self
                     .top_level()
                     .filter(|e| !e.is_locked())
@@ -280,17 +281,27 @@ impl Editor {
             .map(|&i| (self.scene.elements[i].base.id.clone(), crate::random::id()))
             .collect();
 
-        // A unit is a top-level element plus its labels; its copies follow
-        // the unit's last member.
-        let mut units: HashMap<&str, (usize, Vec<usize>)> = HashMap::new();
+        // A unit is a selected group, or a top-level element plus its
+        // labels; its copies follow the unit's last member, so a group's
+        // copies stay together (`actionDuplicateSelection`).
+        let mut units: HashMap<String, (usize, Vec<usize>)> = HashMap::new();
         for &i in &originals {
             let element = &self.scene.elements[i];
-            let unit = container_id(element).unwrap_or(&element.base.id);
+            let owner_id = container_id(element).unwrap_or(&element.base.id);
+            let owner = self
+                .scene
+                .elements
+                .iter()
+                .find(|e| e.base.id == owner_id)
+                .unwrap_or(element);
+            let unit = self
+                .selection_group(owner)
+                .unwrap_or_else(|| owner_id.to_owned());
             let entry = units.entry(unit).or_insert((i, Vec::new()));
             entry.0 = entry.0.max(i);
             entry.1.push(i);
         }
-        let mut groups = HashMap::new();
+        let mut groups = self.kept_groups();
         let mut inserts: Vec<(usize, Vec<Element>)> = units
             .into_values()
             .map(|(last, members)| {
