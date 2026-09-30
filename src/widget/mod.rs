@@ -363,7 +363,9 @@ impl Sketch {
             let rendered = match previous.remove(id) {
                 Some(cached) if cached.revision == revision => cached,
                 _ => {
-                    static_changed |= !active.contains(id);
+                    // A changed frame re-clips its children on the static
+                    // layers, even while it is the one being dragged.
+                    static_changed |= !active.contains(id) || element.frame_title().is_some();
                     let [x1, y1, x2, y2] = geometry::element_bounds(element);
                     Rendered {
                         revision,

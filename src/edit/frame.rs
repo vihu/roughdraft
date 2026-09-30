@@ -1,6 +1,6 @@
 //! Frames take in what is drawn inside them and carry their children
 //! (`frame.ts`, `includeElementsInFrames`).
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::Editor;
 use crate::geometry::{self, Point};
@@ -107,6 +107,19 @@ impl Editor {
         }
     }
 
+    /// Drops selected elements whose frame is selected too
+    /// (`excludeElementsInFramesFromSelection`): the frame stands for them.
+    pub(super) fn exclude_framed_from_selection(&mut self) {
+        let framed: Vec<String> = self
+            .selection()
+            .filter(|e| e.frame_id().is_some_and(|f| self.selected.contains(f)))
+            .map(|e| e.base.id.clone())
+            .collect();
+        for id in framed {
+            self.selected.remove(&id);
+        }
+    }
+
     /// [`Editor::moving`] plus the children of selected frames and their
     /// labels (`includeElementsInFrames`): what drags, nudges, duplicates,
     /// copies, flips and locks along with a frame.
@@ -145,5 +158,13 @@ impl Editor {
             .filter(|e| !e.base.is_deleted && e.frame_id().is_some_and(|f| frames.contains(f)))
             .map(|e| e.base.id.clone())
             .collect()
+    }
+}
+
+/// A copy of a frame child stays in the frame when the frame is not copied
+/// along (`bindElementsToFramesAfterDuplication`); `remap` has cleared it.
+pub(super) fn keep_frame(copy: &mut Element, original: &Element, ids: &HashMap<String, String>) {
+    if let Some(frame) = original.frame_id().filter(|f| !ids.contains_key(*f)) {
+        copy.json_mut().insert("frameId".into(), frame.into());
     }
 }

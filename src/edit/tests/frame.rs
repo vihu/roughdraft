@@ -174,3 +174,41 @@ fn dragging_into_or_out_of_a_frame_changes_membership() {
         "one undo step with the move"
     );
 }
+
+#[test]
+fn frame_children_follow_excalidraws_selection_and_clipping_rules() {
+    let mut editor = editor();
+    // The part of "inside" past frame one's right edge (300) is cut off,
+    // so it cannot be clicked either.
+    click(&mut editor, [320.0, 100.0]);
+    assert_eq!(editor.selection().count(), 0);
+
+    // A duplicated frame is selected alone; its copied children follow it.
+    click(&mut editor, [0.5, 100.0]);
+    editor.command(Command::Duplicate);
+    let selected: Vec<_> = editor.selection().collect();
+    assert!(matches!(selected[..], [one] if one.frame_title().is_some()));
+
+    // A duplicated child stays in its frame.
+    let mut editor = self::editor();
+    click(&mut editor, [100.0, 100.0]);
+    assert!(editor.is_selected("inside"));
+    editor.command(Command::Duplicate);
+    let copy = editor.selection().next().unwrap();
+    assert_eq!(copy.frame_id(), Some("one"));
+
+    // No rotation knob while any frame is selected.
+    click(&mut editor, [0.5, 100.0]);
+    drag(
+        &mut editor,
+        [150.0, 260.0],
+        [150.0, 260.0],
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        },
+    );
+    assert!(editor.is_selected("one") && editor.is_selected("free"));
+    let handles = editor.handles().unwrap();
+    assert!(handles.handles.iter().all(|(h, _)| *h != Handle::Rotation));
+}

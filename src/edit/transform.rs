@@ -145,14 +145,12 @@ impl Editor {
             (Handle::Se, [right, bottom]),
             (Handle::Rotation, rotation),
         ];
-        // A frame has no rotation knob (`getTransformHandles`).
-        let lone_frame = matches!(
-            self.selection().collect::<Vec<_>>()[..],
-            [one] if one.frame_title().is_some()
-        );
+        // No rotation knob when a frame is selected (`getTransformHandles`,
+        // and `renderTransformHandles` for several).
+        let has_frame = self.selection().any(|e| e.frame_title().is_some());
         let handles = local
             .into_iter()
-            .filter(|(h, _)| !(lone_frame && *h == Handle::Rotation))
+            .filter(|(h, _)| !(has_frame && *h == Handle::Rotation))
             .map(|(h, p)| (h, frame.transform.apply(p)))
             .collect();
         Some(Handles {

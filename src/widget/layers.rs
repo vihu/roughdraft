@@ -59,8 +59,13 @@ impl Sketch {
         for (clip, run) in runs {
             frame.with_clip(clip, |frame| {
                 for (id, rendered, drawing) in run {
-                    // `ELEMENT_READY_TO_ERASE_OPACITY`: 20%.
-                    let fade = if erasing.is_some_and(|marked| marked.contains(id)) {
+                    // `ELEMENT_READY_TO_ERASE_OPACITY`: 20%, children of a
+                    // marked frame included (`getRenderOpacity`).
+                    let marked = |marked: &std::collections::HashSet<String>| {
+                        marked.contains(id)
+                            || rendered.frame.as_ref().is_some_and(|f| marked.contains(f))
+                    };
+                    let fade = if erasing.is_some_and(marked) {
                         0.2
                     } else {
                         1.0

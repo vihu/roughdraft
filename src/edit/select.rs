@@ -122,6 +122,7 @@ impl Editor {
                 let mut copy = original.duplicate();
                 copy.base.id = ids[&original.base.id].clone();
                 copy.remap(&ids, &mut groups);
+                super::frame::keep_frame(&mut copy, original, &ids);
                 copy
             })
             .collect();
@@ -136,6 +137,7 @@ impl Editor {
             .collect();
         let first = self.scene.elements.len();
         self.scene.elements.extend(copies);
+        self.exclude_framed_from_selection();
         if let Some(Gesture::Move { starts: moving, .. }) = &mut self.gesture {
             *moving = (first..)
                 .zip(starts.iter().map(|(_, start)| *start))
@@ -200,6 +202,7 @@ impl Editor {
                 selected.extend(inside.map(|e| e.base.id.clone()));
                 self.selected = selected;
                 self.expand_to_groups();
+                self.exclude_framed_from_selection();
                 true
             }
             _ => false,

@@ -8,7 +8,9 @@ pub(super) fn text_block(element: &Element, text: &Text, opacity: f32) -> TextBl
     let (x, align) = match text.text_align {
         TextAlign::Center => (element.base.width / 2.0, Align::Middle),
         TextAlign::Right => (element.base.width, Align::End),
-        // ponytail: RTL lines anchor at the start, Excalidraw anchors them at the end
+        // Anchored by `textAlign` whatever the direction, like Excalidraw's
+        // canvas. ponytail: its SVG export anchors RTL text at the end
+        // with `direction="rtl"`; ported only if RTL previews must match
         TextAlign::Left | TextAlign::Other(_) => (0.0, Align::Start),
     };
     let mut block = left_block(

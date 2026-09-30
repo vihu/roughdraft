@@ -100,6 +100,7 @@ impl Editor {
             .map(|e| e.base.id.clone())
             .collect::<HashSet<_>>();
         self.scene.elements.extend(elements);
+        self.exclude_framed_from_selection();
         true
     }
 }

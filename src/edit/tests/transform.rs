@@ -210,6 +210,57 @@ fn labelled_shapes_keep_one_character_and_scale_their_label_with_shift() {
 }
 
 #[test]
+fn releasing_shift_mid_resize_restores_the_label_font() {
+    let mut editor = editor();
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    editor.set_text("hi");
+    editor.finish_text();
+    editor.command(Command::Tool(Tool::Selection));
+    select_a(&mut editor);
+    let se = handle(&editor, Handle::Se);
+    editor.pointer(Pointer::Down, se, NONE);
+    editor.pointer(Pointer::Move, by(se, [100.0, 50.0]), SHIFT);
+    editor.pointer(Pointer::Move, by(se, [100.0, 60.0]), NONE);
+    editor.pointer(Pointer::Up, by(se, [100.0, 60.0]), NONE);
+    let Kind::Text(text) = &editor.scene().elements.last().unwrap().kind else {
+        panic!("label")
+    };
+    assert_eq!(text.font_size, 20.0);
+}
+
+#[test]
+fn shift_resizing_a_labelled_arrow_scales_the_font_with_its_width() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Arrow));
+    for at in [[0.0, 0.0], [100.0, 100.0], [200.0, 0.0], [200.0, 0.0]] {
+        editor.pointer(Pointer::Hover, at, NONE);
+        editor.pointer(Pointer::Down, at, NONE);
+        editor.pointer(Pointer::Up, at, NONE);
+    }
+    editor.double_click([100.0, 100.0]);
+    editor.set_text("hi");
+    editor.finish_text();
+    editor.command(Command::Escape);
+    let arrow = editor.scene().elements[0].base.id.clone();
+    drag(&mut editor, [50.0, 50.0], [50.0, 50.0], NONE);
+    assert!(editor.is_selected(&arrow));
+    let se = handle(&editor, Handle::Se);
+    let width = editor.scene().elements[0].base.width;
+    drag(&mut editor, se, by(se, [width, 0.0]), SHIFT);
+    let Kind::Text(text) = &editor.scene().elements.last().unwrap().kind else {
+        panic!("label")
+    };
+    let grown = editor.scene().elements[0].base.width / width;
+    assert!(
+        (text.font_size - 20.0 * grown).abs() < 1e-9,
+        "{}",
+        text.font_size
+    );
+    assert!(grown > 1.5);
+}
+
+#[test]
 fn uniform_multi_resize_scales_label_fonts() {
     let mut editor = editor();
     drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);

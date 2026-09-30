@@ -260,6 +260,7 @@ impl Editor {
             }
             self.scene.elements.splice(last + 1..last + 1, copies);
         }
+        self.exclude_framed_from_selection();
     }
 
     fn copy_of(
@@ -274,6 +275,7 @@ impl Editor {
         copy.base.x += DUPLICATE_OFFSET;
         copy.base.y += DUPLICATE_OFFSET;
         copy.remap(new_ids, groups);
+        super::frame::keep_frame(&mut copy, original, new_ids);
         copy
     }
 }

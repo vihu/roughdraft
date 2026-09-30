@@ -56,26 +56,27 @@ impl Editor {
         }
         let resized = scale_element(original, frame, bounds);
         // With Shift the label's font follows the room it has
-        // (`measureFontSizeFromWidth`).
-        let font_size = match label {
-            Some((
-                _,
-                Element {
-                    kind: Kind::Text(text),
-                    ..
-                },
-            )) if keep_aspect => {
-                let (before, after) = (
-                    super::text::max_label_width(original, text.font_size),
-                    super::text::max_label_width(&resized, text.font_size),
-                );
-                let size = text.font_size * after / before;
-                if !size.is_finite() || size < MIN_FONT_SIZE {
+        // (`measureFontSizeFromWidth`; an arrow's width for arrows);
+        // without it the font is the one at the press.
+        let label_font = label.and_then(|(_, e)| match &e.kind {
+            Kind::Text(text) => Some(text.font_size),
+            _ => None,
+        });
+        let font_size = match label_font {
+            Some(size) if keep_aspect => {
+                let ratio = if matches!(original.kind, Kind::Arrow(_)) {
+                    resized.base.width / original.base.width
+                } else {
+                    super::text::max_label_width(&resized, size)
+                        / super::text::max_label_width(original, size)
+                };
+                let scaled = size * ratio;
+                if !scaled.is_finite() || scaled < MIN_FONT_SIZE {
                     return;
                 }
-                Some(size)
+                Some(scaled)
             }
-            _ => None,
+            other => other,
         };
         self.scene.elements[*index] = resized;
         self.scene.elements[*index].touch();
@@ -373,7 +374,6 @@ impl Editor {
     }
 }
 
-/// Which box edges a handle moves: (left, right, top, bottom).
 /// Grows a resized box to at least `min` wide and high from the sides the
 /// handle drags (about the centre with Alt), which also undoes a flip, like
 /// `Math.max(nextWidth, minWidth)`.
@@ -390,7 +390,9 @@ fn at_least(bounds: Bounds, handle: Handle, alt: bool, [min_w, min_h]: [f64; 2])
         } else if moves_high {
             (low, low + min)
         } else {
-            (low, high)
+            // A side not being dragged grows about its middle.
+            let mid = (low + high) / 2.0;
+            (mid - min / 2.0, mid + min / 2.0)
         }
     };
     let [x1, y1, x2, y2] = bounds;
@@ -399,6 +401,7 @@ fn at_least(bounds: Bounds, handle: Handle, alt: bool, [min_w, min_h]: [f64; 2])
     [x1, y1, x2, y2]
 }
 
+/// Which box edges a handle moves: (left, right, top, bottom).
 pub(super) fn edges(handle: Handle) -> (bool, bool, bool, bool) {
     match handle {
         Handle::N => (false, false, true, false),

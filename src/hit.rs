@@ -14,7 +14,8 @@ pub const THRESHOLD: f64 = 8.0;
 /// Returns the topmost element at `at`, within `threshold` scene units.
 ///
 /// Labels are never returned: hitting a label hits its container. Locked
-/// elements are skipped (`getElementsAtPosition`).
+/// elements are skipped (`getElementsAtPosition`), and so is a frame
+/// child where its frame cuts it off.
 pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> {
     elements_at(scene, at, threshold).into_iter().next()
 }
@@ -23,6 +24,13 @@ pub fn element_at(scene: &Scene, at: Point, threshold: f64) -> Option<&Element> 
 /// [`element_at`].
 pub fn elements_at(scene: &Scene, at: Point, threshold: f64) -> Vec<&Element> {
     let order = crate::render::draw_order(scene);
+    let frames = crate::render::frames(scene);
+    // Only the part inside its frame is shown (`isCursorInFrame`).
+    let shown_at = |e: &Element| {
+        e.frame_id()
+            .and_then(|f| frames.get(f))
+            .is_none_or(|frame| in_box(frame, at, 0.0))
+    };
     let label_of = |container: &Element| {
         order
             .iter()
@@ -34,7 +42,7 @@ pub fn elements_at(scene: &Scene, at: Point, threshold: f64) -> Vec<&Element> {
         .rev()
         .copied()
         // Locked elements are skipped, so what is below them can be hit.
-        .filter(|e| container_id(e).is_none() && !e.is_locked())
+        .filter(|e| container_id(e).is_none() && !e.is_locked() && shown_at(e))
         .filter(|e| {
             let label = label_of(e);
             hits(e, label.is_some(), at, threshold) || label.is_some_and(|l| in_box(l, at, 0.0))
