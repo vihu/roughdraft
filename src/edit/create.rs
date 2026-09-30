@@ -4,7 +4,7 @@ use std::f64::consts::{FRAC_PI_2, PI};
 
 use super::{Editor, Gesture, Modifiers, Multi, Tool};
 use crate::geometry::Point;
-use crate::scene::{Element, Kind, Linear, Roundness};
+use crate::scene::{Element, FillStyle, Kind, Linear, Roundness, StrokeStyle};
 
 /// Scene units a line press must travel before it counts as a drag
 /// (`DRAGGING_THRESHOLD`).
@@ -88,6 +88,9 @@ impl Editor {
                     // A click without a drag draws nothing; the tool stays.
                     self.scene.elements.remove(index);
                 } else {
+                    if self.tool == Tool::Frame {
+                        self.adopt_into_frame(index);
+                    }
                     self.finish(index, before);
                 }
             }
@@ -188,6 +191,20 @@ impl Editor {
                     style.start_arrowhead.clone(),
                     style.end_arrowhead.clone(),
                 ))
+            }
+            // `FRAME_STYLE`; the name stays null, shown as "Frame".
+            Tool::Frame => {
+                base.stroke_color = "#bbb".into();
+                base.background_color = "transparent".into();
+                base.fill_style = FillStyle::Solid;
+                base.stroke_width = 2.0;
+                base.stroke_style = StrokeStyle::Solid;
+                base.roughness = 0.0;
+                let mut frame = Element::new(Kind::Other("frame".into()), base);
+                frame
+                    .json_mut()
+                    .insert("name".into(), serde_json::Value::Null);
+                return Some(frame);
             }
             Tool::Selection | Tool::Hand | Tool::Text | Tool::Eraser => return None,
         };

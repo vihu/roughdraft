@@ -78,6 +78,8 @@ pub enum Tool {
     Text,
     /// Drag across elements to delete them.
     Eraser,
+    /// Drag out a frame; what lies wholly inside joins it.
+    Frame,
 }
 
 /// Modifier keys held during a pointer event.

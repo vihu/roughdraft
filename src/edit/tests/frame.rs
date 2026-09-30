@@ -106,3 +106,45 @@ fn erasing_a_frame_erases_its_children() {
     }
     assert!(!get(&editor, "poke").base.is_deleted);
 }
+
+#[test]
+fn the_frame_tool_takes_in_what_lies_wholly_inside() {
+    let mut editor = editor();
+    editor.command(Command::Tool(crate::edit::Tool::Frame));
+    // Around the free diamond at (120, 240), 120 x 80.
+    drag(
+        &mut editor,
+        [100.0, 220.0],
+        [260.0, 340.0],
+        Modifiers::default(),
+    );
+    let frame = editor.selection().next().unwrap();
+    assert_eq!(frame.frame_title(), Some("Frame"));
+    let id = frame.base.id.clone();
+    let json = serde_json::to_value(editor.scene().saved()).unwrap();
+    let saved = json["elements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id.as_str())
+        .unwrap();
+    assert_eq!(
+        (&saved["type"], &saved["name"], &saved["strokeColor"]),
+        (&"frame".into(), &serde_json::Value::Null, &"#bbb".into())
+    );
+    assert_eq!(get(&editor, "free").frame_id(), Some(id.as_str()));
+
+    // Another frame's child stays where it is.
+    editor.command(Command::Tool(crate::edit::Tool::Frame));
+    drag(
+        &mut editor,
+        [410.0, 80.0],
+        [560.0, 220.0],
+        Modifiers::default(),
+    );
+    assert_eq!(get(&editor, "poke").frame_id(), Some("two"));
+
+    editor.command(Command::Undo);
+    editor.command(Command::Undo);
+    assert_eq!(get(&editor, "free").frame_id(), None, "one undo step each");
+}

@@ -95,8 +95,8 @@ like Excalidraw) and can be selected, moved, resized and erased; there is no
 pen tool yet. Frames are drawn (outline, title, children cut off at the
 frame) and are selected by their outline or title; moving, duplicating,
 copying, flipping, locking or erasing one takes its children along, and
-deleting one keeps them. There is no frame tool, and elements do not join
-or leave frames when moved. Not supported: embeds, laser, elbow arrow routing
+deleting one keeps them. The frame tool (F) takes in what lies wholly
+inside the new frame; elements do not join or leave frames when moved. Not supported: embeds, laser, elbow arrow routing
 (drawn as polylines), editing an image's crop, snapping, collaboration. Elements of these types are
 kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
 bundled and render in the system sans or monospace font.

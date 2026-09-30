@@ -129,6 +129,13 @@ impl canvas::Program<Message> for Icon {
                 polyline(&[(7.0, 9.0), (12.5, 14.5)], false),
                 polyline(&[(10.0, 17.0), (17.0, 17.0)], false),
             ],
+            // Excalidraw's frame: a box whose sides run past the corners.
+            Glyph::Tool(Tool::Frame) => vec![
+                polyline(&[(3.0, 6.5), (17.0, 6.5)], false),
+                polyline(&[(3.0, 13.5), (17.0, 13.5)], false),
+                polyline(&[(6.5, 3.0), (6.5, 17.0)], false),
+                polyline(&[(13.5, 3.0), (13.5, 17.0)], false),
+            ],
             Glyph::Tool(Tool::Text) => vec![
                 polyline(&[(5.0, 16.0), (10.0, 4.0), (15.0, 16.0)], false),
                 polyline(&[(7.0, 12.0), (13.0, 12.0)], false),

@@ -40,7 +40,7 @@ const BACKGROUNDS: [&str; 5] = ["transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", 
 /// Tools in Excalidraw's order, with their shortcut key.
 /// Tool, name for the tooltip, and the key shown under the icon (the
 /// tooltip names the letter too).
-const TOOLS: [(Tool, &str, &str); 9] = [
+const TOOLS: [(Tool, &str, &str); 10] = [
     (Tool::Hand, "Hand (H)", "H"),
     (Tool::Selection, "Selection (V or 1)", "1"),
     (Tool::Rectangle, "Rectangle (R or 2)", "2"),
@@ -50,6 +50,7 @@ const TOOLS: [(Tool, &str, &str); 9] = [
     (Tool::Line, "Line (L or 6)", "6"),
     (Tool::Text, "Text (T or 8)", "8"),
     (Tool::Eraser, "Eraser (E or 0)", "0"),
+    (Tool::Frame, "Frame (F)", "F"),
 ];
 
 /// Arrowhead choices for the pick lists.

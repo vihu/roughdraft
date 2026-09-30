@@ -66,6 +66,7 @@ pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Comm
             ("l" | "6", _) => Some(Command::Tool(Tool::Line)),
             ("t" | "8", _) => Some(Command::Tool(Tool::Text)),
             ("e" | "0", _) => Some(Command::Tool(Tool::Eraser)),
+            ("f", _) => Some(Command::Tool(Tool::Frame)),
             ("q", _) => Some(Command::ToggleLock),
             _ => None,
         },
