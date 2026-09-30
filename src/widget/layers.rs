@@ -1,6 +1,8 @@
 //! The scene's elements as drawings: re-rendered when they change, drawn on
 //! a canvas frame culled to the view, faded while marked for erasing, and
 //! frame children clipped to their frame.
+use std::collections::{HashMap, HashSet};
+
 use iced::widget::canvas::Frame;
 
 use super::picture::{Picture, decode_image};
@@ -32,8 +34,10 @@ impl Sketch {
         for element in render::draw_order(scene) {
             let id = &element.base.id;
             let revision = element.revision();
+            let live = active.contains(id);
             let rendered = match previous.remove(id) {
-                Some(cached) if cached.revision == revision => cached,
+                // A stale drawing is only good while its gesture lasts.
+                Some(cached) if cached.revision == revision && (live || !cached.stale) => cached,
                 _ => {
                     // A frame resized alone re-clips children that sit on
                     // the static layers.
@@ -47,7 +51,10 @@ impl Sketch {
                     let [x1, y1, x2, y2] = geometry::element_bounds(element);
                     Rendered {
                         revision,
-                        drawing: render::render_element(element, background),
+                        drawing: (!live)
+                            .then(|| render::render_element(element, background))
+                            .flatten(),
+                        stale: live,
                         label: render::frame_label(element),
                         frame: element.frame_id().map(String::from),
                         extent: [
@@ -59,7 +66,7 @@ impl Sketch {
                     }
                 }
             };
-            if rendered.drawing.is_some() {
+            if rendered.drawing.is_some() || rendered.stale {
                 order.push(id.clone());
             }
             self.drawings.insert(id.clone(), rendered);
@@ -111,6 +118,29 @@ impl Sketch {
         }
     }
 
+    /// Renders the stale elements among `ids` for this frame.
+    pub(super) fn render_stale(&self, ids: &[String]) -> HashMap<&str, Drawing> {
+        let stale: HashSet<&str> = ids
+            .iter()
+            .map(String::as_str)
+            .filter(|id| self.drawings[*id].stale)
+            .collect();
+        if stale.is_empty() {
+            return HashMap::new();
+        }
+        let scene = self.editor.scene();
+        let background = scene.background_color();
+        scene
+            .elements
+            .iter()
+            .filter(|e| stale.contains(e.base.id.as_str()))
+            .filter_map(|e| {
+                let drawing = render::render_element(e, background)?;
+                Some((e.base.id.as_str(), drawing))
+            })
+            .collect()
+    }
+
     pub(super) fn drawings(&self) -> impl Iterator<Item = &Drawing> {
         self.order
             .iter()
@@ -138,7 +168,15 @@ impl Sketch {
         self.camera.set(camera);
     }
 
-    pub(super) fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
+    /// Draws the elements `ids` in view. A stale element (changed by the
+    /// gesture) is drawn from `fresh`, rendered for this frame.
+    pub(super) fn draw_ids(
+        &self,
+        frame: &mut Frame,
+        ids: &[String],
+        view: Affine,
+        fresh: &HashMap<&str, Drawing>,
+    ) {
         // Only what is in view, like Excalidraw's `getVisibleCanvasElements`.
         let camera = self.camera.get();
         let [ox, oy] = camera.origin;
@@ -155,7 +193,10 @@ impl Sketch {
         let drawings = shown
             .map(|id| (id, &self.drawings[id]))
             .filter(|(_, rendered)| visible(rendered.extent))
-            .filter_map(|(id, rendered)| Some((id, rendered, rendered.drawing.as_ref()?)));
+            .filter_map(|(id, rendered)| {
+                let drawing = fresh.get(id.as_str()).or(rendered.drawing.as_ref())?;
+                Some((id, rendered, drawing))
+            });
         // Frame children are cut off at their frame's box (`frameClip`).
         // Everything goes through clip drafts in runs of one region, since
         // wgpu draws a frame's own meshes after every pasted draft.

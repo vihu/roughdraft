@@ -64,6 +64,7 @@ pub(super) fn shortcut(key: &Key, modifiers: keyboard::Modifiers) -> Option<Comm
             ("o" | "4", _) => Some(Command::Tool(Tool::Ellipse)),
             ("a" | "5", _) => Some(Command::Tool(Tool::Arrow)),
             ("l" | "6", _) => Some(Command::Tool(Tool::Line)),
+            ("p" | "x" | "7", _) => Some(Command::Tool(Tool::Freedraw)),
             ("t" | "8", _) => Some(Command::Tool(Tool::Text)),
             ("e" | "0", _) => Some(Command::Tool(Tool::Eraser)),
             ("f", _) => Some(Command::Tool(Tool::Frame)),

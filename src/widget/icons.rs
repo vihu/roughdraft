@@ -18,8 +18,8 @@ pub(super) enum Glyph {
         locked: bool,
     },
     Fill(FillStyle),
-    /// Stroke width, 1 to 4.
-    Width(u8),
+    /// Stroke width, 0.25 to 4.
+    Width(f32),
     Dash(StrokeStyle),
     /// Sloppiness, 0 to 2.
     Rough(u8),
@@ -121,6 +121,20 @@ impl canvas::Program<Message> for Icon {
                 polyline(&[(10.0, 4.0), (16.0, 4.0), (16.0, 10.0)], false),
             ],
             Glyph::Tool(Tool::Line) => vec![polyline(&[(3.5, 10.0), (16.5, 10.0)], false)],
+            // A pencil pointing down-left: body, sharpened end and tip.
+            Glyph::Tool(Tool::Freedraw) => vec![
+                polyline(
+                    &[
+                        (4.0, 16.0),
+                        (8.4, 14.4),
+                        (17.0, 5.8),
+                        (14.2, 3.0),
+                        (5.6, 11.6),
+                    ],
+                    true,
+                ),
+                polyline(&[(5.6, 11.6), (8.4, 14.4)], false),
+            ],
             Glyph::Tool(Tool::Eraser) => vec![
                 polyline(
                     &[
@@ -181,7 +195,10 @@ impl canvas::Program<Message> for Icon {
             }
             Glyph::Width(width) => {
                 let line = polyline(&[(3.5, 10.0), (16.5, 10.0)], false);
-                frame.stroke(&line, stroke.with_width(f32::from(width)));
+                // As thick as the width, the finer ones a little thicker so
+                // they still show.
+                let thickness = if width < 1.0 { width + 0.25 } else { width };
+                frame.stroke(&line, stroke.with_width(thickness));
                 Vec::new()
             }
             Glyph::Dash(style) => {

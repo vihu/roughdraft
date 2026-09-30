@@ -92,9 +92,10 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 | Files   | Excalidraw 0.18 JSON, lossless; older scenes load with Excalidraw's restore defaults; `Scene::version` tells when there is something to save                                                                                                                                                                    |
 | Export  | SVG shaped like Excalidraw's `exportToSvg`, optionally with its fonts embedded                                                                                                                                                                                                                                  |
 
-Freedraw strokes made in Excalidraw are drawn (with perfect-freehand, exactly
-like Excalidraw) and can be selected, moved, resized and erased; there is no
-pen tool yet. Frames are drawn (outline, title, children cut off at the
+The pen (P or 7) draws freehand strokes, rendered with perfect-freehand
+exactly like Excalidraw, with two finer widths than Excalidraw offers;
+strokes can be selected, moved, resized and erased.
+Frames are drawn (outline, title, children cut off at the
 frame) and are selected by their outline or title; moving, duplicating,
 copying, flipping, locking or erasing one takes its children along, and
 deleting one keeps them. The frame tool (F) takes in what lies wholly

@@ -82,8 +82,11 @@ pub struct Sketch {
 #[derive(Debug)]
 struct Rendered {
     revision: (i64, i64),
-    /// `None` for types not drawn yet.
+    /// `None` for types not drawn yet, and while `stale`.
     drawing: Option<Drawing>,
+    /// Changed by the current gesture: rendered when the canvas draws
+    /// (`draw_ids`), once per frame instead of on every pointer event.
+    stale: bool,
     /// A frame's title, drawn before its outline.
     label: Option<Drawing>,
     /// The frame this element is clipped to, if any (`frameId`).

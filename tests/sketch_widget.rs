@@ -325,6 +325,7 @@ fn every_tool_draws_mid_gesture() {
         ("o", (250.0, 100.0), (330.0, 180.0)),
         ("a", (100.0, 450.0), (470.0, 340.0)),
         ("l", (600.0, 100.0), (700.0, 200.0)),
+        ("p", (600.0, 250.0), (700.0, 300.0)),
         ("f", (50.0, 50.0), (350.0, 400.0)),
         ("e", (380.0, 280.0), (580.0, 400.0)),
         ("v", (20.0, 500.0), (60.0, 560.0)),
@@ -446,9 +447,11 @@ fn the_main_menu_asks_the_host_and_switches_the_theme() {
 }
 
 #[test]
-fn background_and_fill_show_only_where_a_fill_can_be_drawn() {
+fn style_sections_show_only_where_they_apply() {
     // `hasBackground`, `showFillIcons`: arrows get neither; a rectangle gets
     // Background, and Fill once its background is not transparent.
+    // `hasStrokeWidth`, `hasStrokeStyle`: the pen gets a stroke width but no
+    // sloppiness.
     let sections =
         |sketch: &mut Sketch,
          act: &dyn Fn(&mut iced_test::Simulator<'_, roughdraft::widget::Message>)| {
@@ -458,7 +461,15 @@ fn background_and_fill_show_only_where_a_fill_can_be_drawn() {
                 (800.0, 900.0),
                 sketch.view(),
             );
-            ["Background", "Fill", "Arrow type", "Edges"].map(|name| ui.find(name).is_ok())
+            [
+                "Background",
+                "Fill",
+                "Arrow type",
+                "Edges",
+                "Stroke width",
+                "Sloppiness",
+            ]
+            .map(|name| ui.find(name).is_ok())
         };
     let tool = |key: &'static str| {
         move |ui: &mut iced_test::Simulator<'_, roughdraft::widget::Message>| {
@@ -468,14 +479,20 @@ fn background_and_fill_show_only_where_a_fill_can_be_drawn() {
     let mut empty = Sketch::new(Scene::default());
     assert_eq!(
         sections(&mut empty, &tool("a")),
-        [false, false, true, false],
+        [false, false, true, false, true, true],
         "arrow"
     );
     let mut empty = Sketch::new(Scene::default());
     assert_eq!(
         sections(&mut empty, &tool("r")),
-        [true, false, false, true],
+        [true, false, false, true, true, true],
         "rectangle"
+    );
+    let mut empty = Sketch::new(Scene::default());
+    assert_eq!(
+        sections(&mut empty, &tool("p")),
+        [true, false, false, false, true, false],
+        "pen"
     );
 
     let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":400,"y":300,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
@@ -488,7 +505,7 @@ fn background_and_fill_show_only_where_a_fill_can_be_drawn() {
     };
     assert_eq!(
         sections(&mut filled, &select),
-        [true, true, false, true],
+        [true, true, false, true, true, true],
         "filled box"
     );
 }

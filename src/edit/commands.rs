@@ -147,6 +147,7 @@ impl Editor {
                 Gesture::Move { before, .. }
                 | Gesture::Shape { before, .. }
                 | Gesture::Line { before, .. }
+                | Gesture::Freedraw { before, .. }
                 | Gesture::Resize { before, .. }
                 | Gesture::Rotate { before, .. }
                 | Gesture::Endpoint { before, .. }

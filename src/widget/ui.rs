@@ -45,7 +45,7 @@ const BACKGROUNDS: [&str; 5] = ["transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", 
 /// Tools in Excalidraw's order, with their shortcut key.
 /// Tool, name for the tooltip, and the key shown under the icon (the
 /// tooltip names the letter too).
-const TOOLS: [(Tool, &str, &str); 10] = [
+const TOOLS: [(Tool, &str, &str); 11] = [
     (Tool::Hand, "Hand (H)", "H"),
     (Tool::Selection, "Selection (V or 1)", "1"),
     (Tool::Rectangle, "Rectangle (R or 2)", "2"),
@@ -53,6 +53,7 @@ const TOOLS: [(Tool, &str, &str); 10] = [
     (Tool::Ellipse, "Ellipse (O or 4)", "4"),
     (Tool::Arrow, "Arrow (A or 5)", "5"),
     (Tool::Line, "Line (L or 6)", "6"),
+    (Tool::Freedraw, "Draw (P or 7)", "7"),
     (Tool::Text, "Text (T or 8)", "8"),
     (Tool::Eraser, "Eraser (E or 0)", "0"),
     (Tool::Frame, "Frame (F)", "F"),
@@ -211,8 +212,6 @@ impl Sketch {
             return None;
         }
         let has = |test: fn(&Kind) -> bool| selected.iter().any(|e| test(&e.kind));
-        let text_only =
-            !selected.is_empty() && selected.iter().all(|e| matches!(e.kind, Kind::Text(_)));
         let arrows = tool == Tool::Arrow || has(|k| matches!(k, Kind::Arrow(_)));
         let texts = tool == Tool::Text
             || has(|k| matches!(k, Kind::Text(_)))
@@ -223,7 +222,6 @@ impl Sketch {
                     .flatten()
                     .any(|b| b.kind == "text")
             });
-        let shapes = !text_only && tool != Tool::Text;
         let style = self.editor.current_style();
 
         let mut sections: Vec<Element<'_, Message>> = vec![section(
@@ -237,11 +235,11 @@ impl Sketch {
             matches!(
                 kind,
                 Kind::Rectangle | Kind::Diamond | Kind::Ellipse | Kind::Line(_)
-            ) || matches!(kind, Kind::Other(k) if k == "freedraw")
+            ) || is_freedraw(kind)
         };
         let tool_fills = matches!(
             tool,
-            Tool::Rectangle | Tool::Diamond | Tool::Ellipse | Tool::Line
+            Tool::Rectangle | Tool::Diamond | Tool::Ellipse | Tool::Line | Tool::Freedraw
         );
         if tool_fills || selected.iter().any(|e| fillable(&e.kind)) {
             sections.push(section(
@@ -274,17 +272,39 @@ impl Sketch {
             });
             sections.push(section("Fill", self.icon_choices(fills)));
         }
-        if shapes {
-            let widths = [(1, "Thin"), (2, "Bold"), (4, "Extra bold")].map(|(width, name)| {
-                let active = style.stroke_width == f64::from(width);
-                (
-                    Glyph::Width(width),
-                    name,
-                    active,
-                    StyleChange::StrokeWidth(f64::from(width)),
-                )
-            });
+        // Stroke width for shapes, lines, arrows and pen strokes
+        // (`hasStrokeWidth`); stroke style and sloppiness for all of them but
+        // pen strokes (`hasStrokeStyle`).
+        let tool_styled = matches!(
+            tool,
+            Tool::Rectangle | Tool::Diamond | Tool::Ellipse | Tool::Arrow | Tool::Line
+        );
+        let pen = tool == Tool::Freedraw || has(is_freedraw);
+        if tool_styled || pen || has(has_stroke_style) {
+            // Pen strokes also get two finer widths than Excalidraw's three
+            // (on shapes they would pack the hachure fill: its gap is four
+            // stroke widths).
+            let finer: &[(f64, &'static str)] = if pen {
+                &[(0.25, "Hairline"), (0.5, "Extra thin")]
+            } else {
+                &[]
+            };
+            let widths = finer
+                .iter()
+                .copied()
+                .chain([(1.0, "Thin"), (2.0, "Bold"), (4.0, "Extra bold")])
+                .map(|(width, name)| {
+                    let active = style.stroke_width == width;
+                    (
+                        Glyph::Width(width as f32),
+                        name,
+                        active,
+                        StyleChange::StrokeWidth(width),
+                    )
+                });
             sections.push(section("Stroke width", self.icon_choices(widths)));
+        }
+        if tool_styled || has(has_stroke_style) {
             let dashes = [
                 (StrokeStyle::Solid, "Solid"),
                 (StrokeStyle::Dashed, "Dashed"),
@@ -311,23 +331,23 @@ impl Sketch {
                     )
                 });
             sections.push(section("Sloppiness", self.icon_choices(roughness)));
-            // Edges only where roundness applies (`canChangeRoundness`);
-            // arrows have their own type.
-            let edged = matches!(tool, Tool::Rectangle | Tool::Diamond | Tool::Line)
-                || has(|k| matches!(k, Kind::Rectangle | Kind::Diamond | Kind::Line(_)))
-                || has(|k| matches!(k, Kind::Other(kind) if kind == "image"));
-            if edged {
-                let edges = [(false, "Sharp"), (true, "Round")].map(|(round, name)| {
-                    let active = style.round_edges == round;
-                    (
-                        Glyph::Edges { round },
-                        name,
-                        active,
-                        StyleChange::RoundEdges(round),
-                    )
-                });
-                sections.push(section("Edges", self.icon_choices(edges)));
-            }
+        }
+        // Edges only where roundness applies (`canChangeRoundness`); arrows
+        // have their own type.
+        let edged = matches!(tool, Tool::Rectangle | Tool::Diamond | Tool::Line)
+            || has(|k| matches!(k, Kind::Rectangle | Kind::Diamond | Kind::Line(_)))
+            || has(|k| matches!(k, Kind::Other(kind) if kind == "image"));
+        if edged {
+            let edges = [(false, "Sharp"), (true, "Round")].map(|(round, name)| {
+                let active = style.round_edges == round;
+                (
+                    Glyph::Edges { round },
+                    name,
+                    active,
+                    StyleChange::RoundEdges(round),
+                )
+            });
+            sections.push(section("Edges", self.icon_choices(edges)));
         }
         if arrows {
             let types = [(false, "Sharp"), (true, "Curved")].map(|(round, name)| {
@@ -412,9 +432,9 @@ impl Sketch {
 impl Sketch {
     /// A row of icon buttons for a style property, the current one
     /// highlighted, each named in a tooltip.
-    fn icon_choices<'a, const N: usize>(
+    fn icon_choices<'a>(
         &self,
-        options: [(Glyph, &'static str, bool, StyleChange); N],
+        options: impl IntoIterator<Item = (Glyph, &'static str, bool, StyleChange)>,
     ) -> Element<'a, Message> {
         let theme = self.theme();
         let palette = theme.palette();
@@ -458,6 +478,18 @@ impl Sketch {
             .spacing(4)
             .into()
     }
+}
+
+/// Whether the kind has a stroke style and sloppiness (`hasStrokeStyle`).
+fn has_stroke_style(kind: &Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Rectangle | Kind::Diamond | Kind::Ellipse | Kind::Line(_) | Kind::Arrow(_)
+    )
+}
+
+fn is_freedraw(kind: &Kind) -> bool {
+    matches!(kind, Kind::Other(k) if k == "freedraw")
 }
 
 fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Message> {

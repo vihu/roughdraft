@@ -1,6 +1,6 @@
 //! The canvas `Program`: pointer and keyboard input to [`Sketch`] messages,
 //! and the layered draw.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use iced::keyboard::{self, Key, key::Named};
@@ -242,13 +242,14 @@ impl canvas::Program<Message> for Sketch {
             frame.with_clip(full, |frame| {
                 frame.fill_rectangle(Point::ORIGIN, frame.size(), self.paint(self.background));
             });
-            self.draw_ids(frame, below, view);
+            self.draw_ids(frame, below, view, &HashMap::new());
         });
         let mut dynamic = Frame::new(renderer, size);
-        self.draw_ids(&mut dynamic, middle, view);
-        let above = self
-            .above
-            .draw(renderer, size, |frame| self.draw_ids(frame, above, view));
+        let fresh = self.render_stale(middle);
+        self.draw_ids(&mut dynamic, middle, view, &fresh);
+        let above = self.above.draw(renderer, size, |frame| {
+            self.draw_ids(frame, above, view, &HashMap::new())
+        });
         let mut overlay = Frame::new(renderer, size);
         self.draw_overlay(&mut overlay, self.camera.get().zoom, view);
         vec![

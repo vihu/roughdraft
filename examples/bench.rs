@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use iced::advanced::graphics::geometry::Renderer as _;
 use iced::advanced::renderer::{self, Headless};
+use iced::keyboard::{self, Key};
 use iced::widget::canvas::Program;
 use iced::{Color, Event, Point, Rectangle, Size, mouse};
 use roughdraft::edit::{Command, Editor, Modifiers, Pointer, StyleChange, Tool};
@@ -85,7 +86,53 @@ fn main() {
         })
         .collect();
     report("pan", &pan);
+
+    // One long pen stroke, 8 pointer events per frame (a 500 Hz mouse at
+    // 60 frames a second): the cost grows with its length.
+    let key = Event::Keyboard(keyboard::Event::KeyPressed {
+        key: Key::Character("p".into()),
+        modified_key: Key::Character("p".into()),
+        physical_key: keyboard::key::Physical::Code(keyboard::key::Code::KeyP),
+        location: keyboard::Location::Standard,
+        modifiers: keyboard::Modifiers::default(),
+        text: Some("p".into()),
+        repeat: false,
+    });
+    bench.frame(&mut sketch, Some(&key), centre);
+    let at = |i: usize| {
+        let t = i as f32 / 40.0;
+        Point::new(100.0 + i as f32 * 0.5, 400.0 + 150.0 * t.sin())
+    };
+    bench.frame(&mut sketch, Some(&down), mouse::Cursor::Available(at(0)));
+    let stroke: Vec<Timing> = (1..=STROKE / PER_FRAME)
+        .map(|frame| {
+            let events: Vec<_> = (1..=PER_FRAME)
+                .map(|k| {
+                    let position = at((frame - 1) * PER_FRAME + k);
+                    let moved = Event::Mouse(mouse::Event::CursorMoved { position });
+                    (moved, mouse::Cursor::Available(position))
+                })
+                .collect();
+            let cursor = mouse::Cursor::Available(at(frame * PER_FRAME));
+            bench.frame_of(&mut sketch, &events, cursor)
+        })
+        .collect();
+    let count = sketch.scene().elements.len();
+    bench.frame(&mut sketch, Some(&up), mouse::Cursor::Available(at(STROKE)));
+    assert_eq!(sketch.scene().elements.len(), count, "the stroke was drawn");
+    let tail = 200 / PER_FRAME;
+    report("pen, first 200 points", &stroke[..tail]);
+    report(
+        &format!("pen, points {} to {STROKE}", STROKE - 200),
+        &stroke[stroke.len() - tail..],
+    );
 }
+
+/// Points in the pen stroke.
+const STROKE: usize = 2000;
+
+/// Pointer events between two frames while drawing the stroke.
+const PER_FRAME: usize = 8;
 
 /// The canvas' state and renderer, kept across frames like a window's.
 struct Bench {
@@ -110,10 +157,25 @@ impl Bench {
         event: Option<&Event>,
         cursor: mouse::Cursor,
     ) -> Timing {
+        self.frame_of(
+            sketch,
+            event.map(|e| (e.clone(), cursor)).as_slice(),
+            cursor,
+        )
+    }
+
+    /// Feeds several events, as a window gets from a fast mouse between two
+    /// frames, then draws one frame with the cursor at `cursor`.
+    fn frame_of(
+        &mut self,
+        sketch: &mut Sketch,
+        events: &[(Event, mouse::Cursor)],
+        cursor: mouse::Cursor,
+    ) -> Timing {
         let bounds = Rectangle::with_size(VIEWPORT);
         let start = Instant::now();
-        if let Some(event) = event {
-            let action = Program::update(&*sketch, &mut self.state, event, bounds, cursor);
+        for (event, cursor) in events {
+            let action = Program::update(&*sketch, &mut self.state, event, bounds, *cursor);
             if let Some((Some(message), _, _)) = action.map(|a| a.into_inner()) {
                 let _ = sketch.update(message);
             }

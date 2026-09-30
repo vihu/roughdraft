@@ -10,6 +10,7 @@ mod create;
 mod eraser;
 mod flip;
 mod frame;
+mod freedraw;
 mod group;
 mod line;
 mod order;
@@ -74,6 +75,8 @@ pub enum Tool {
     Arrow,
     /// Drag, or click point by point, to draw a line.
     Line,
+    /// Drag to draw freehand; the tool stays after each stroke.
+    Freedraw,
     /// Click to type text; on a shape, its label.
     Text,
     /// Drag across elements to delete them.
@@ -184,6 +187,12 @@ enum Gesture {
         origin: Point,
         before: Vec<Element>,
         dragged: bool,
+    },
+    /// Drawing a freehand stroke; `bounds` spans its points so far.
+    Freedraw {
+        index: usize,
+        before: Vec<Element>,
+        bounds: Bounds,
     },
     /// Dragging a resize handle; `start` holds the elements as pressed.
     Resize {
@@ -321,6 +330,7 @@ impl Editor {
                 Some(
                     Gesture::Shape { index, .. }
                     | Gesture::Line { index, .. }
+                    | Gesture::Freedraw { index, .. }
                     | Gesture::Endpoint { index, .. }
                     | Gesture::Points { index, .. },
                 ),

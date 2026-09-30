@@ -158,6 +158,7 @@ mod binding;
 mod clipboard;
 mod create;
 mod frame;
+mod freedraw;
 mod order;
 mod regressions;
 mod style;

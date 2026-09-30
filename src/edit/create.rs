@@ -1,4 +1,5 @@
-//! Drawing new shapes, lines and arrows (REFERENCE-001 sections 11-12).
+//! Drawing new shapes, lines and arrows (REFERENCE-001 sections 11-12); the
+//! pen's strokes are in `freedraw.rs`.
 use std::collections::HashSet;
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -13,7 +14,7 @@ const DRAG_THRESHOLD: f64 = 10.0;
 /// Scene units around the last point where a click finishes a multi-point
 /// line, and around the first point where it closes a loop
 /// (`LINE_CONFIRM_THRESHOLD`).
-const CONFIRM_THRESHOLD: f64 = 8.0;
+pub(super) const CONFIRM_THRESHOLD: f64 = 8.0;
 
 /// Shift snaps line angles to multiples of this (`SHIFT_LOCKING_ANGLE`).
 const LOCK_ANGLE: f64 = PI / 12.0;
@@ -34,22 +35,26 @@ impl Editor {
         let Some(element) = self.new_element(at) else {
             return;
         };
-        let linear = matches!(element.kind, Kind::Line(_) | Kind::Arrow(_));
-        self.scene.elements.push(element);
-        self.gesture = Some(if linear {
-            Gesture::Line {
+        let gesture = match element.kind {
+            Kind::Line(_) | Kind::Arrow(_) => Gesture::Line {
                 index,
                 origin: at,
                 before,
                 dragged: false,
-            }
-        } else {
-            Gesture::Shape {
+            },
+            _ if self.tool == Tool::Freedraw => Gesture::Freedraw {
+                index,
+                before,
+                bounds: [0.0; 4],
+            },
+            _ => Gesture::Shape {
                 index,
                 origin: at,
                 before,
-            }
-        });
+            },
+        };
+        self.scene.elements.push(element);
+        self.gesture = Some(gesture);
     }
 
     /// Continues drawing; returns `false` when not drawing.
@@ -73,6 +78,10 @@ impl Editor {
                 *dragged = true;
                 let index = *index;
                 self.set_points(index, vec![[0.0, 0.0], lock_angle(offset, modifiers.shift)]);
+                true
+            }
+            Some(Gesture::Freedraw { .. }) => {
+                self.extend_stroke(at);
                 true
             }
             _ => false,
@@ -113,6 +122,7 @@ impl Editor {
                 );
                 self.multi = Some(Multi { index, before });
             }
+            Some(Gesture::Freedraw { index, before, .. }) => self.finish_stroke(index, at, before),
             other => {
                 self.gesture = other;
                 return false;
@@ -206,6 +216,7 @@ impl Editor {
                     .insert("name".into(), serde_json::Value::Null);
                 return Some(frame);
             }
+            Tool::Freedraw => return Some(self.new_stroke(at)),
             Tool::Selection | Tool::Hand | Tool::Text | Tool::Eraser => return None,
         };
         Some(Element::new(kind, base))
@@ -279,8 +290,8 @@ impl Editor {
         ([element.base.x, element.base.y], points)
     }
 
-    /// Replaces a line's points; width and height follow, like
-    /// `mutateElement` does.
+    /// Replaces a line's or a pen stroke's points; width and height
+    /// follow, like `mutateElement` does.
     pub(super) fn set_points(&mut self, index: usize, points: Vec<Point>) {
         let element = &mut self.scene.elements[index];
         let (xs, ys): (Vec<f64>, Vec<f64>) = points.iter().map(|[x, y]| (*x, *y)).unzip();
@@ -292,6 +303,11 @@ impl Editor {
         element.base.height = span(&ys);
         if let Kind::Line(line) | Kind::Arrow(line) = &mut element.kind {
             line.points = points;
+        } else {
+            // A stroke keeps its points in its JSON (`Element::freedraw`).
+            element
+                .json_mut()
+                .insert("points".into(), serde_json::json!(points));
         }
         element.touch();
     }
@@ -308,7 +324,7 @@ impl Editor {
     }
 }
 
-fn distance(a: Point, b: Point) -> f64 {
+pub(super) fn distance(a: Point, b: Point) -> f64 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 

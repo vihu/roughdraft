@@ -318,7 +318,27 @@ fn svg_path(points: &[Point]) -> Vec<Segment> {
 
 /// Cuts a number's decimal spelling after two digits, like
 /// `TO_FIXED_PRECISION` does to the path string.
+///
+/// When `value * 100` is clearly between two integers, the cut is its
+/// integer part; only near an integer, where the product's rounding could
+/// cross it, does the spelling decide ([`truncate_spelled`]). Same result,
+/// several times faster on a long stroke.
 fn truncate(value: f64) -> f64 {
+    /// How close to an integer `value * 100` must be to need the spelling:
+    /// far above the product's rounding error below [`FAST_LIMIT`].
+    const NEAR: f64 = 1e-6;
+    /// Largest `|value * 100|` for the fast path.
+    const FAST_LIMIT: f64 = 1e9;
+    let scaled = value * 100.0;
+    let fraction = (scaled - scaled.trunc()).abs();
+    if scaled.abs() < FAST_LIMIT && (NEAR..1.0 - NEAR).contains(&fraction) {
+        return scaled.trunc() / 100.0;
+    }
+    truncate_spelled(value)
+}
+
+/// [`truncate`] through the decimal spelling itself.
+fn truncate_spelled(value: f64) -> f64 {
     let text = value.to_string();
     match text.find('.') {
         Some(dot) => text[..(dot + 3).min(text.len())].parse().unwrap_or(value),
@@ -384,7 +404,7 @@ fn rot_around(a: Point, c: Point, r: f64) -> Point {
 
 #[cfg(test)]
 mod tests {
-    use super::{outline, stroke, truncate};
+    use super::{outline, stroke, truncate, truncate_spelled};
     use crate::geometry::Point;
     use crate::render::Segment;
     use crate::scene::Scene;
@@ -458,6 +478,27 @@ mod tests {
         assert_eq!(truncate(1.239), 1.23);
         assert_eq!(truncate(-1.239), -1.23);
         assert_eq!(truncate(2.0), 2.0);
+        // 0.29 * 100 is 28.999999999999996 in floating point.
+        assert_eq!(truncate(0.29), 0.29);
+        assert_eq!(truncate(-0.001).to_bits(), (-0.0f64).to_bits());
+        // The fast path agrees with the spelling, near two-decimal numbers
+        // (one step either side) and between them.
+        for i in -200_000..200_000 {
+            let exact = f64::from(i) / 100.0;
+            for value in [
+                exact,
+                f64::from_bits(exact.to_bits() + 1),
+                f64::from_bits(exact.to_bits().saturating_sub(1)),
+                exact + 0.003_7,
+                exact * 1.000_000_1,
+            ] {
+                assert_eq!(
+                    truncate(value).to_bits(),
+                    truncate_spelled(value).to_bits(),
+                    "{value}"
+                );
+            }
+        }
     }
 
     #[test]

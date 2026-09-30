@@ -92,6 +92,7 @@ fn session(seed: u64) {
                 Tool::Ellipse,
                 Tool::Arrow,
                 Tool::Line,
+                Tool::Freedraw,
                 Tool::Text,
                 Tool::Hand,
                 Tool::Eraser,
