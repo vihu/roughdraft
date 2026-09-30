@@ -81,13 +81,14 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 
 | Area | Supported |
 | --- | --- |
-| Shapes | Rectangle, diamond, ellipse; lines and arrows, straight or multi-point, with every Excalidraw arrowhead |
-| Text | Free text and labels inside shapes, wrapped to the container, in Excalidraw's fonts |
-| Images | Rendered from `files[id].dataURL`; insert and paste |
-| Editing | Select, box select, move, resize, rotate, delete, duplicate, undo/redo, z-order, group, arrow binding |
-| Style | Stroke and background color, fill (hachure, cross-hatch, solid), stroke width and style, sloppiness, edges, opacity, arrowheads, font size, family and alignment |
-| App | Excalidraw's clipboard format, pan and zoom, Excalidraw's keyboard shortcuts, dark mode with Excalidraw's canvas filter |
-| Export | SVG shaped like Excalidraw's `exportToSvg` |
+| Shapes | Rectangle, diamond, ellipse; lines and arrows, straight or multi-point, with every Excalidraw arrowhead; drag any point, and Excalidraw's line editor to add and delete points |
+| Text | Free text and labels inside shapes and on arrows, wrapped like Excalidraw, in Excalidraw's fonts; side handles re-wrap free text |
+| Images | Rendered from `files[id].dataURL`; insert, paste, copy between editors |
+| Editing | Select, box select, move, Alt+drag duplicate, resize, rotate, delete, duplicate, undo/redo, z-order, group, arrow binding with Excalidraw's highlight; locked elements stay put |
+| Style | Stroke and background color (swatches or hex), fill (hachure, cross-hatch, solid), stroke width and style, sloppiness, edges, opacity, arrowheads, font size, family and alignment |
+| App | Excalidraw's clipboard format, pan and zoom (keyboard zoom and fit too), Excalidraw's keyboard shortcuts, dark mode with Excalidraw's canvas filter and a matching tool bar |
+| Files | Excalidraw 0.18 JSON, lossless; older scenes load with Excalidraw's restore defaults; `Scene::version` tells when there is something to save |
+| Export | SVG shaped like Excalidraw's `exportToSvg`, optionally with its fonts embedded |
 
 Not supported: freedraw, frames, embeds, laser, elbow arrow routing (drawn as
 polylines), image crop, snapping, collaboration. Elements of these types are
@@ -114,6 +115,8 @@ mode.
   including scenes drawn with this editor.
 - Behaviour tests for the editor in `src/edit/tests/`, and headless widget
   tests driven through iced's simulator in `tests/sketch_widget.rs`.
+- `tests/editor_fuzz.rs`: seeded random editing sessions that must never
+  panic and must keep every reference in the scene valid.
 - `cargo run --release --example bench` measures frame times on a
   500-element scene.
 
