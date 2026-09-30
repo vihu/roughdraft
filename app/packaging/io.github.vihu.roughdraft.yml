@@ -1,0 +1,41 @@
+# Flatpak manifest for the release bundles, built from this checkout.
+#
+# Cargo fetches the dependencies during the build (--share=network). That
+# is fine for a bundle but not on Flathub, whose builds are offline: a
+# Flathub manifest pins a release tag and vendors the crates instead.
+app-id: io.github.vihu.roughdraft
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: roughdraft
+finish-args:
+  # Files come and go through the file chooser portal: no filesystem access.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+modules:
+  - name: roughdraft
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      build-args:
+        - --share=network
+      env:
+        CARGO_HOME: /run/build/roughdraft/cargo
+    build-commands:
+      - cargo build --release --locked -p roughdraft-app
+      - install -Dm755 target/release/roughdraft -t /app/bin
+      - install -Dm644 app/packaging/io.github.vihu.roughdraft.desktop -t /app/share/applications
+      - install -Dm644 app/packaging/io.github.vihu.roughdraft.svg -t /app/share/icons/hicolor/scalable/apps
+      - install -Dm644 app/packaging/io.github.vihu.roughdraft.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .ai-docs
+          - .git
+          - repo
+          - target

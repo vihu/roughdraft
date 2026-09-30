@@ -53,6 +53,8 @@ appdir=$(mktemp -d)/roughdraft.AppDir
 install -Dm755 target/release/roughdraft "$appdir/usr/bin/roughdraft"
 install -Dm644 "app/packaging/$id.desktop" "$appdir/usr/share/applications/$id.desktop"
 install -Dm644 "app/packaging/$id.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/$id.svg"
+# appimagetool looks for the metainfo under its older name.
+install -Dm644 "app/packaging/$id.metainfo.xml" "$appdir/usr/share/metainfo/$id.appdata.xml"
 ln -s "usr/share/applications/$id.desktop" "$appdir/$id.desktop"
 ln -s "usr/share/icons/hicolor/scalable/apps/$id.svg" "$appdir/$id.svg"
 ln -s usr/bin/roughdraft "$appdir/AppRun"

@@ -108,9 +108,13 @@ bundled and render in the system sans or monospace font.
 
 Download it from [Releases](https://github.com/vihu/roughdraft/releases):
 
-- Linux (x86_64 and arm64): `roughdraft-<version>-<arch>.AppImage`. Make it
-  executable (`chmod +x`) and run it. Needs glibc 2.35 or newer (Ubuntu
-  22.04, Debian 12, Fedora 36 and later).
+- Linux (x86_64 and arm64), either of:
+  - `roughdraft-<version>-<arch>.flatpak`: run
+    `flatpak install --user roughdraft-<version>-<arch>.flatpak` (it fetches
+    the runtime from Flathub), then start roughdraft from the app menu.
+  - `roughdraft-<version>-<arch>.AppImage`: make it executable
+    (`chmod +x`) and run it. Needs glibc 2.35 or newer (Ubuntu 22.04,
+    Debian 12, Fedora 36 and later).
 - macOS 11 or newer (Apple silicon and Intel):
   `roughdraft-<version>-macos-universal.zip`. Unzip it and move
   `roughdraft.app` to Applications. The app is not notarized, so macOS blocks

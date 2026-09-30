@@ -54,20 +54,50 @@ jobs:
           path: target/dist/*.zip
           if-no-files-found: error
 
+  flatpak:
+    name: Flatpak (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container:
+      # Keep in step with runtime-version in the manifest.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-26.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        run: echo "version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      # Uploads the bundle as the artifact <bundle>-<arch>.
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: app/packaging/io.github.vihu.roughdraft.yml
+          bundle: roughdraft-${{ steps.version.outputs.version }}-${{ matrix.arch }}.flatpak
+          arch: ${{ matrix.arch }}
+          cache: false
+
   release:
     name: Draft the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [appimage, macos]
+    needs: [appimage, macos, flatpak]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - name: Check the tag matches the version in Cargo.toml
+      - name: Check the tag matches the version in Cargo.toml and the metainfo
         run: |
           version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml)
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
+            exit 1
+          fi
+          if ! grep -q "<release version=\"$version\"" app/packaging/io.github.vihu.roughdraft.metainfo.xml; then
+            echo "::error::no <release version=\"$version\"> in app/packaging/io.github.vihu.roughdraft.metainfo.xml"
             exit 1
           fi
       - uses: actions/download-artifact@v8

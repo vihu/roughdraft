@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.vihu.roughdraft</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>roughdraft</name>
+  <summary>Sketch hand-drawn diagrams</summary>
+  <developer id="io.github.vihu">
+    <name>vihu</name>
+  </developer>
+  <description>
+    <p>
+      roughdraft is a desktop editor for diagrams that look hand-drawn. It
+      opens and saves Excalidraw files (.excalidraw), keeps everything in
+      them intact, and draws them the way Excalidraw does.
+    </p>
+    <ul>
+      <li>Rectangles, diamonds, ellipses, arrows, lines, text, frames and images</li>
+      <li>Excalidraw's keyboard shortcuts</li>
+      <li>Copy and paste shapes to and from excalidraw.com</li>
+      <li>Export to SVG</li>
+      <li>Light and dark mode</li>
+    </ul>
+    <p>
+      It works offline: your drawings stay as plain files on your computer.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.vihu.roughdraft.desktop</launchable>
+  <url type="homepage">https://github.com/vihu/roughdraft</url>
+  <url type="bugtracker">https://github.com/vihu/roughdraft/issues</url>
+  <url type="vcs-browser">https://github.com/vihu/roughdraft</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#ffa94d</color>
+    <color type="primary" scheme_preference="dark">#8f4a0b</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-09-30"/>
+  </releases>
+</component>
