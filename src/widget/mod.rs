@@ -490,7 +490,6 @@ fn write_clipboard(json: Option<String>) -> Task<Message> {
 
 /// Top-left of everything drawn, minus [`PADDING`], so a scene opens at 100%
 /// zoom aligned like Excalidraw's SVG export.
-// ponytail: uses the rough outline, off by the wobble (~2px) from Excalidraw's element bounds
 fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
     let mut min = [f64::INFINITY, f64::INFINITY];
     for drawing in drawings {

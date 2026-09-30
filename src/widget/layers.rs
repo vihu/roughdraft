@@ -30,9 +30,6 @@ impl Sketch {
         // Frame children are cut off at their frame's box (`frameClip`).
         // Everything goes through clip drafts in runs of one region, since
         // wgpu draws a frame's own meshes after every pasted draft.
-        // ponytail: square corners and unrotated, Excalidraw rounds them; and
-        // iced's tiny-skia `paste` drops a draft's clip at the pinned rev, so
-        // the software fallback draws frame children uncut
         let full = iced::Rectangle::with_size(frame.size());
         let region = |rendered: &Rendered| {
             let Some(owner) = rendered.frame.as_deref().and_then(|f| frames.get(f)) else {

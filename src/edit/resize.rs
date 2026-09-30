@@ -112,8 +112,6 @@ impl Editor {
 
     /// Smallest box a labelled shape keeps (`getApproxMinLineWidth`,
     /// `getApproxMinLineHeight`): one character by one line, plus padding.
-    // ponytail: the widest character of this label; Excalidraw takes the
-    // widest one it has measured in that font so far
     fn min_label_box(&self, label: &Element) -> [f64; 2] {
         let Kind::Text(text) = &label.kind else {
             return [0.0, 0.0];
@@ -341,8 +339,6 @@ impl Editor {
     /// Puts labels back inside their containers after a resize or rotation:
     /// aligned per `textAlign`/`verticalAlign`, same angle; arrow labels on
     /// the arrow's middle.
-    // ponytail: aligns within the container's full box; Excalidraw insets
-    // top/bottom/left/right-aligned labels further in ellipses and diamonds
     pub(super) fn sync_labels(&mut self, start: &[(usize, Element)]) {
         for (label_index, _) in start.iter().filter(|(_, e)| container_id(e).is_some()) {
             let label = &self.scene.elements[*label_index];

@@ -128,8 +128,6 @@ pub(super) fn font(family: u32) -> Font {
         7 => Font::new("Lilita One"),
         // The font's own family name.
         8 => Font::new("Comic Shanns Regular"),
-        // ponytail: Cascadia is not bundled (Reserved Font Name, unclear
-        // whether Excalidraw's copy is a subset); Helvetica cannot be.
         3 => Font::MONOSPACE,
         2 | 9 => Font::DEFAULT,
         _ => Font::new("Excalifont"),

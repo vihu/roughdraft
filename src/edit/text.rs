@@ -459,7 +459,6 @@ pub(super) fn max_label_width(container: &Element, font_size: f64) -> f64 {
 
 /// Greedy word wrap to `max_width`; words wider than a line are broken
 /// between characters.
-// ponytail: plain greedy wrap on spaces, Excalidraw follows Unicode line-break rules (textWrapping.ts)
 fn wrap(text: &str, max_width: f64, family: u32, size: f64, measure: &dyn Measure) -> String {
     let fits = |s: &str| measure.line_width(s, family, size) <= max_width;
     let mut lines = Vec::new();

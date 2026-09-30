@@ -94,8 +94,6 @@ impl Editor {
         }
 
         self.history.record(self.scene.elements.clone());
-        // ponytail: files are not undone with the paste; `saved` drops them
-        // once no live image uses them.
         for (id, file) in value["files"].as_object().into_iter().flatten() {
             self.scene.add_missing_file(id, file.clone());
         }

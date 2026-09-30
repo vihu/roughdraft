@@ -147,7 +147,6 @@ pub fn local_bounds(element: &Element) -> Bounds {
 
 /// Maps element-local points to scene points: rotation around the local
 /// box center, then translation to `x`/`y`.
-// ponytail: rotates lines around their points' center, Excalidraw uses the rough curve's (render.rs); differs only for rotated curves
 pub fn element_transform(element: &Element) -> Affine {
     let [x1, y1, x2, y2] = local_bounds(element);
     let center = [(x1 + x2) / 2.0, (y1 + y2) / 2.0];

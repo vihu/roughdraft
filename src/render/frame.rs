@@ -41,9 +41,6 @@ const TITLE_COLOR: Rgba = Rgba::rgb(
 ///
 /// The color is the light theme's; Excalidraw's dark export uses
 /// `#7a7a7a` before its dark filter.
-// ponytail: titles are not cut to the frame's width with "..."
-// (`truncateText` measures Helvetica), and the editor draws them at a fixed
-// 14 px on screen where this scales with the zoom.
 pub fn frame_label(element: &Element) -> Option<Drawing> {
     let title = element.frame_title()?;
     let (family, size, line_height) = TITLE_FONT;
@@ -64,7 +61,6 @@ pub fn frame_label(element: &Element) -> Option<Drawing> {
 /// Returns the box of a frame's title in the frame's local coordinates
 /// (`[x1, y1, x2, y2]`), where a click selects the frame; `None` for other
 /// elements.
-// ponytail: as wide as the frame, Excalidraw measures the title's DOM box
 pub(crate) fn title_box(element: &Element) -> Option<[f64; 4]> {
     element.frame_title()?;
     let (_, size, line_height) = TITLE_FONT;

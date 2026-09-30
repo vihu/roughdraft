@@ -53,8 +53,6 @@ impl Editor {
     /// `updateFrameMembershipOfSelectedElements`). A child whose frame is
     /// selected too keeps it; with a frame among the dragged elements
     /// nothing joins a frame (no `frameToHighlight`).
-    // ponytail: box overlap, element by element; Excalidraw intersects the
-    // outlines and moves groups in or out whole
     pub(super) fn update_frame_membership(&mut self, at: Point) {
         let drags_frame = self.selection().any(|e| e.frame_title().is_some());
         let target = if drags_frame {
@@ -80,7 +78,6 @@ impl Editor {
     /// After resizing frames (`getElementsInResizingFrame`): children that
     /// no longer overlap their frame leave it, and what now lies wholly
     /// inside joins.
-    // ponytail: box overlap, element by element (Excalidraw keeps groups)
     pub(super) fn refit_selected_frames(&mut self) {
         let frames: Vec<usize> = self
             .scene

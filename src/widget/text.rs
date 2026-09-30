@@ -70,7 +70,6 @@ impl Measure for CosmicMeasure {
 
 impl Sketch {
     /// The text editor over the element being typed, if any.
-    // ponytail: edits left-aligned and unrotated; iced's text_editor has no horizontal alignment
     pub(super) fn text_overlay(&self) -> Option<Element<'_, Message>> {
         let element = self.editor.editing()?;
         let Kind::Text(text) = &element.kind else {

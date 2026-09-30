@@ -30,7 +30,6 @@ pub(super) fn linear(
     } else {
         line.points.clone()
     };
-    // ponytail: elbow arrows drawn as plain polylines, port `generateElbowArrowShape` if needed
     let shaft = match (&element.base.roundness, &options.fill) {
         (None, Some(_)) => generator.polygon(&points, Some(options.clone())),
         (None, None) => generator.linear_path(&points, Some(options.clone())),

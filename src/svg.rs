@@ -56,7 +56,6 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
         crate::edit::common_bounds(elements.iter().copied())
     };
     // Frame titles sit above their frames and count as content.
-    // ponytail: only the title's top-left, its measured width is not known
     for label in elements.iter().filter_map(|e| render::frame_label(e)) {
         let [x, y] = label.transform.apply([0.0, 0.0]);
         (x1, y1) = (x1.min(x), y1.min(y));

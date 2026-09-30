@@ -180,8 +180,6 @@ impl Picture {
 
 /// Decodes an image to RGBA up front: iced draws RGBA handles in the frame
 /// they appear, while encoded ones load on a worker and pop in later.
-// ponytail: decodes on the UI thread when a scene loads; move to a Task if
-// large photos stall opening a scene.
 pub(super) fn decode_image(bytes: &[u8]) -> Option<iced::widget::image::Handle> {
     let rgba = image::load_from_memory(bytes).ok()?.into_rgba8();
     let (width, height) = rgba.dimensions();
