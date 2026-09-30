@@ -374,12 +374,13 @@ impl Editor {
                 start,
                 center,
             }) => {
-                let mut angle =
-                    normalize_angle(5.0 * PI / 2.0 + (at[1] - center[1]).atan2(at[0] - center[0]));
+                // Snapped, then normalised, like `rotateSingleElement`.
+                let mut angle = 5.0 * PI / 2.0 + (at[1] - center[1]).atan2(at[0] - center[0]);
                 if modifiers.shift {
                     angle += LOCK_ANGLE / 2.0;
                     angle -= angle % LOCK_ANGLE;
                 }
+                let angle = normalize_angle(angle);
                 self.rotate(&start, center, angle);
                 self.update_bound_arrows(&ids(&start));
                 self.gesture = Some(Gesture::Rotate {

@@ -65,6 +65,7 @@ impl Editor {
     pub fn double_click(&mut self, at: Point) {
         self.finish_text();
         self.finish_multi();
+        self.line_edit = None;
         let target = self.hit(at).map(|e| e.base.id.clone());
         match target {
             // A grouped element: the first double-click enters its group.
@@ -97,7 +98,12 @@ impl Editor {
         let empty = matches!(&element.kind, Kind::Text(t) if t.text.trim().is_empty());
         let id = element.base.id.clone();
         let container = container_id(element).map(str::to_owned);
-        if empty {
+        let new = !before.iter().any(|e| e.base.id == id);
+        if empty && new {
+            // Nothing was typed into new text: the session leaves no trace
+            // and no undo step.
+            self.scene.elements.clone_from(&before);
+        } else if empty {
             let element = &mut self.scene.elements[index];
             element.base.is_deleted = true;
             element.touch();

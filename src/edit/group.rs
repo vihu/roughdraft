@@ -13,7 +13,7 @@ impl Editor {
     /// Groups the selection (two or more elements) under a new outermost
     /// group, as one undo step. The members keep their order but move up to
     /// the topmost one, so the group is contiguous in the stack.
-    pub fn group(&mut self) {
+    pub(super) fn group(&mut self) {
         let targets = self.moving();
         let top_level = targets
             .iter()
@@ -59,7 +59,7 @@ impl Editor {
     }
 
     /// Dissolves the selected groups, as one undo step.
-    pub fn ungroup(&mut self) {
+    pub(super) fn ungroup(&mut self) {
         let doomed: HashSet<String> = self
             .selected_groups()
             .into_iter()

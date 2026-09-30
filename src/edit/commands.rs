@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use super::{Command, Editor, Gesture, Tool};
 use crate::geometry::Point;
 use crate::hit::container_id;
-use crate::scene::Element;
+use crate::scene::{Element, Kind};
 
 /// `1 + FONT_SIZE_RELATIVE_INCREASE_STEP`.
 const FONT_STEP: f64 = 1.1;
@@ -52,12 +52,24 @@ impl Editor {
             }
             Command::Escape => self.tool = Tool::Selection,
             Command::Finish if drawing => {}
+            // Enter edits only text and shapes that take a label.
             Command::Finish => {
                 let selected: Vec<(String, Point)> = self
                     .selection()
+                    .filter(|e| {
+                        matches!(
+                            e.kind,
+                            Kind::Text(_)
+                                | Kind::Rectangle
+                                | Kind::Diamond
+                                | Kind::Ellipse
+                                | Kind::Arrow(_)
+                        )
+                    })
                     .map(|e| (e.base.id.clone(), [e.base.x, e.base.y]))
                     .collect();
-                if let [(id, at)] = &selected[..] {
+                let single = self.selection().count() == 1;
+                if let ([(id, at)], true) = (&selected[..], single) {
                     self.edit_element(id, *at);
                 }
             }
@@ -107,6 +119,16 @@ impl Editor {
 
 // Private API
 impl Editor {
+    /// Brings the editor to rest before an action from outside a command
+    /// (paste, cut, inserting an image): no gesture, no text being typed,
+    /// no line being drawn, and the line editor closed.
+    pub(super) fn settle(&mut self) {
+        self.cancel_gesture();
+        self.finish_text();
+        self.finish_multi();
+        self.line_edit = None;
+    }
+
     /// Drops a pointer gesture and puts back the scene it started from, so
     /// nothing runs against the element indices it holds (an undo while
     /// dragging would leave them dangling).

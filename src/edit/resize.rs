@@ -54,6 +54,19 @@ impl Editor {
         if bounds[2] == bounds[0] && bounds[3] == bounds[1] {
             return;
         }
+        // Free text stops at font size 1 and at its opposite corner
+        // (`resizeSingleTextElement`).
+        if let Kind::Text(text) = &original.kind {
+            let [x1, _, x2, _] = frame.bounds;
+            let size = text.font_size * (bounds[2] - bounds[0]) / (x2 - x1);
+            if bounds[2] < bounds[0]
+                || bounds[3] < bounds[1]
+                || size.is_nan()
+                || size < MIN_FONT_SIZE
+            {
+                return;
+            }
+        }
         let resized = scale_element(original, frame, bounds);
         // With Shift the label's font follows the room it has
         // (`measureFontSizeFromWidth`; an arrow's width for arrows);

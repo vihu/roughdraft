@@ -315,7 +315,7 @@ fn distance(a: Point, b: Point) -> f64 {
 /// `getLockedLinearCursorAlignSize`: with Shift, snaps the direction to
 /// 15-degree steps, keeping the horizontal distance.
 pub(super) fn lock_angle([dx, dy]: Point, shift: bool) -> Point {
-    if !shift {
+    if !shift || (dx == 0.0 && dy == 0.0) {
         return [dx, dy];
     }
     let locked = ((dy / dx).atan() / LOCK_ANGLE).round() * LOCK_ANGLE;

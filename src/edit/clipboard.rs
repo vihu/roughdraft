@@ -43,7 +43,7 @@ impl Editor {
     pub fn cut(&mut self) -> Option<String> {
         // Text being typed is committed first, so the cut takes what the
         // selection is afterwards (`finish_text` selects the text).
-        self.finish_text();
+        self.settle();
         let json = self.copy()?;
         self.delete();
         Some(json)
@@ -54,7 +54,7 @@ impl Editor {
     /// selection. Other text becomes a text element centred on `at`.
     /// Returns `false` when there is nothing to paste.
     pub fn paste(&mut self, text: &str, at: Point) -> bool {
-        self.finish_text();
+        self.settle();
         let value = serde_json::from_str::<Value>(text.trim()).unwrap_or_default();
         if !value["type"]
             .as_str()
@@ -127,7 +127,7 @@ impl Editor {
         size: [f64; 2],
         at: Point,
     ) -> String {
-        self.finish_text();
+        self.settle();
         let before = self.scene.elements.clone();
         let file_id = crate::random::id();
         self.scene.insert_file(&file_id, mime, data_url);

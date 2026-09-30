@@ -137,3 +137,126 @@ fn a_labelled_bound_arrow_flips_instead_of_swapping_heads() {
     assert_eq!(flipped_start, start, "heads stay");
     assert_ne!(flipped_points, points, "the points mirror");
 }
+
+#[test]
+fn pasting_while_the_line_editor_is_open_closes_it() {
+    // It kept point indices of the old line and panicked on the new one.
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Line));
+    drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
+    let json = editor.copy().unwrap();
+    editor.command(Command::Tool(Tool::Line));
+    for at in [
+        [0.0, 100.0],
+        [100.0, 100.0],
+        [200.0, 100.0],
+        [300.0, 100.0],
+        [300.0, 100.0],
+    ] {
+        editor.pointer(Pointer::Hover, at, NONE);
+        editor.pointer(Pointer::Down, at, NONE);
+        editor.pointer(Pointer::Up, at, NONE);
+    }
+    editor.command(Command::EditLine);
+    drag(&mut editor, [300.0, 100.0], [300.0, 100.0], NONE);
+    assert!(editor.paste(&json, [150.0, 300.0]));
+    assert_eq!(editor.editing_line(), None);
+    let shift = Modifiers {
+        shift: true,
+        ..NONE
+    };
+    drag(&mut editor, [100.0, 300.0], [100.0, 300.0], shift);
+}
+
+#[test]
+fn shift_drawing_back_to_the_start_keeps_points_finite() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Line));
+    let shift = Modifiers {
+        shift: true,
+        ..NONE
+    };
+    editor.pointer(Pointer::Down, [0.0, 0.0], shift);
+    editor.pointer(Pointer::Move, [50.0, 0.0], shift);
+    editor.pointer(Pointer::Move, [0.0, 0.0], shift);
+    editor.pointer(Pointer::Up, [0.0, 0.0], shift);
+    for element in &editor.scene().elements {
+        if let Kind::Line(line) = &element.kind {
+            assert!(line.points.iter().flatten().all(|v| v.is_finite()));
+        }
+    }
+}
+
+#[test]
+fn text_left_empty_leaves_no_undo_step() {
+    let mut editor = editor();
+    drag(&mut editor, [50.0, 25.0], [50.0, 25.0], NONE);
+    editor.command(Command::Nudge([5.0, 0.0]));
+    editor.command(Command::Undo);
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [500.0, 500.0], [500.0, 500.0], NONE);
+    editor.command(Command::Escape);
+    editor.command(Command::Redo);
+    assert_eq!(super::x(&editor, "a"), 5.0, "the redo survives");
+}
+
+#[test]
+fn text_resize_stops_at_size_one_and_shift_rotation_stores_zero() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Text));
+    drag(&mut editor, [0.0, 0.0], [0.0, 0.0], NONE);
+    editor.set_text("hi");
+    editor.finish_text();
+    let se = |editor: &Editor| {
+        editor
+            .handles()
+            .unwrap()
+            .handles
+            .iter()
+            .find(|(h, _)| *h == Handle::Se)
+            .unwrap()
+            .1
+    };
+    let corner = se(&editor);
+    drag(&mut editor, corner, [0.5, 0.5], NONE);
+    let corner = se(&editor);
+    drag(&mut editor, corner, [-100.0, -100.0], NONE);
+    let text = &editor.scene().elements[0];
+    let Kind::Text(t) = &text.kind else {
+        panic!("text")
+    };
+    assert!(t.font_size >= 1.0, "{}", t.font_size);
+
+    // Just left of straight up with Shift snaps to 0, not 2π.
+    let knob = editor
+        .handles()
+        .unwrap()
+        .handles
+        .iter()
+        .find(|(h, _)| *h == Handle::Rotation)
+        .unwrap()
+        .1;
+    let b = &editor.scene().elements[0].base;
+    let centre = [b.x + b.width / 2.0, b.y + b.height / 2.0];
+    let shift = Modifiers {
+        shift: true,
+        ..NONE
+    };
+    drag(
+        &mut editor,
+        knob,
+        [centre[0] - 0.5, centre[1] - 200.0],
+        shift,
+    );
+    assert_eq!(editor.scene().elements[0].base.angle, 0.0);
+}
+
+#[test]
+fn enter_on_a_line_does_not_start_text() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Line));
+    drag(&mut editor, [0.0, 0.0], [100.0, 0.0], NONE);
+    editor.command(Command::Finish);
+    assert!(editor.editing().is_none());
+    assert_eq!(editor.scene().elements.len(), 1);
+}

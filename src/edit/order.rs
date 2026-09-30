@@ -27,7 +27,7 @@ struct Unit {
 
 impl Editor {
     /// Moves the selection in the stack, as one undo step.
-    pub fn reorder(&mut self, order: Order) {
+    pub(super) fn reorder(&mut self, order: Order) {
         if self.selected.is_empty() {
             return;
         }
