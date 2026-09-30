@@ -101,6 +101,15 @@ fn hits(element: &Element, labelled: bool, at: Point, threshold: f64) -> bool {
                 polygon_hit(&line.points, false, p, threshold, false)
             }
         }
+        // A frame's outline, like a transparent rectangle, or its title
+        // (`hitElementItself` with `frameNameBound`).
+        Kind::Other(_) if element.frame_title().is_some() => {
+            let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]];
+            let on_title = crate::render::title_box(element).is_some_and(|[x1, y1, x2, y2]| {
+                (x1..=x2).contains(&p[0]) && (y1..=y2).contains(&p[1])
+            });
+            on_title || polygon_hit(&corners, true, p, threshold, false)
+        }
         Kind::Other(kind) if kind == "image" => {
             let corners = [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]];
             polygon_hit(&corners, true, p, threshold, true)

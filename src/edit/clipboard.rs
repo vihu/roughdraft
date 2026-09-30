@@ -25,7 +25,7 @@ impl Editor {
             return None;
         }
         let elements: Vec<&Element> = self
-            .moving()
+            .moving_with_children()
             .into_iter()
             .map(|(i, _)| &self.scene.elements[i])
             .collect();

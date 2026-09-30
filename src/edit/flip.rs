@@ -25,12 +25,10 @@ impl Editor {
     /// Mirrors the selection as one undo step.
     pub(super) fn flip(&mut self, axis: Axis) {
         let indices: Vec<usize> = self
-            .scene
-            .elements
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| self.selected.contains(&e.base.id) && container_id(e).is_none())
+            .moving_with_children()
+            .into_iter()
             .map(|(i, _)| i)
+            .filter(|&i| container_id(&self.scene.elements[i]).is_none())
             .collect();
         if indices.is_empty() {
             return;

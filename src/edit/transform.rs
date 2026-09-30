@@ -145,7 +145,16 @@ impl Editor {
             (Handle::Se, [right, bottom]),
             (Handle::Rotation, rotation),
         ];
-        let handles = local.map(|(h, p)| (h, frame.transform.apply(p))).to_vec();
+        // A frame has no rotation knob (`getTransformHandles`).
+        let lone_frame = matches!(
+            self.selection().collect::<Vec<_>>()[..],
+            [one] if one.frame_title().is_some()
+        );
+        let handles = local
+            .into_iter()
+            .filter(|(h, _)| !(lone_frame && *h == Handle::Rotation))
+            .map(|(h, p)| (h, frame.transform.apply(p)))
+            .collect();
         Some(Handles {
             angle: frame.transform.rotation(),
             handles,

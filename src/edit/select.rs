@@ -90,7 +90,7 @@ impl Editor {
         self.gesture = Some(Gesture::Move {
             from: at,
             before: self.scene.elements.clone(),
-            starts: self.moving(),
+            starts: self.moving_with_children(),
             moved: false,
             clicked,
             duplicated: false,

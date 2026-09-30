@@ -185,7 +185,9 @@ impl Editor {
             .filter(|(_, e)| container_id(e).is_none())
             .count()
             == 1;
-        for (index, original) in start.iter().filter(|(_, e)| container_id(e).is_none()) {
+        // Frames never rotate (`rotateSingleElement`, `rotateMultipleElements`).
+        let turns = |e: &Element| container_id(e).is_none() && e.frame_title().is_none();
+        for (index, original) in start.iter().filter(|(_, e)| turns(e)) {
             let element = &mut self.scene.elements[*index];
             if single {
                 element.base.angle = angle;

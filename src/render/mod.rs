@@ -16,7 +16,7 @@ use crate::color::Rgba;
 use crate::geometry::{Affine, Point};
 use crate::scene::{Element, FillStyle, Kind, Roundness, Scene, StrokeStyle};
 
-pub(crate) use self::frame::{FRAME_RADIUS, rounded_rect};
+pub(crate) use self::frame::{FRAME_RADIUS, rounded_rect, title_box};
 pub use self::frame::{frame_label, frames};
 pub(crate) use self::segment::{segment_length, segment_midpoint};
 

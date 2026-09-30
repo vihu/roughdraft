@@ -61,8 +61,11 @@ impl Editor {
             .collect();
         if !top_level.is_empty() {
             let tool = self.tool;
+            // An erased frame takes its children with it (`eraseElements`).
             self.selected = top_level;
-            self.delete();
+            let children = self.frame_children();
+            self.selected.extend(children);
+            self.delete_keeping(&HashSet::new());
             self.tool = tool;
         }
         true

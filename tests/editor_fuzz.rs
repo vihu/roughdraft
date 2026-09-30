@@ -192,6 +192,9 @@ fn check(editor: &Editor, seed: u64, step: usize, full: bool) {
                 "{at}: image {id} lost its file"
             );
         }
+        if let Some(frame) = element.frame_id() {
+            assert!(live.contains(frame), "{at}: {id} is in a missing frame");
+        }
         for bound in element.base.bound_elements.iter().flatten() {
             assert!(
                 live.contains(bound.id.as_str()),

@@ -157,6 +157,7 @@ fn delete_drops_bindings_and_saves_without_tombstones() {
 mod binding;
 mod clipboard;
 mod create;
+mod frame;
 mod order;
 mod style;
 mod text;

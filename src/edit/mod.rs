@@ -9,6 +9,7 @@ mod commands;
 mod create;
 mod eraser;
 mod flip;
+mod frame;
 mod group;
 mod line;
 mod order;
@@ -30,9 +31,6 @@ use crate::geometry::{self, Bounds, Point};
 use crate::history::History;
 use crate::hit::{self, container_id};
 use crate::scene::{Element, Scene};
-
-/// `1 + FONT_SIZE_RELATIVE_INCREASE_STEP`.
-const FONT_STEP: f64 = 1.1;
 
 /// A scene being edited: selection, active tool, gesture and undo history.
 #[derive(Debug)]
@@ -378,93 +376,6 @@ impl Editor {
             Pointer::Up => {
                 if !self.erase_release() && !self.select_release() {
                     self.create_release(at);
-                }
-            }
-        }
-    }
-
-    /// Runs a keyboard command. Any command first finishes a multi-point
-    /// line or arrow in progress.
-    pub fn command(&mut self, command: Command) {
-        self.finish_text();
-        let drawing = self.multi.is_some();
-        self.finish_multi();
-        // The line editor stays open only for what it handles itself.
-        if !matches!(
-            command,
-            Command::Delete | Command::Undo | Command::Redo | Command::Escape | Command::Nudge(_)
-        ) {
-            self.line_edit = None;
-        }
-        match command {
-            Command::Escape if self.line_edit.is_some() => self.line_edit = None,
-            Command::Delete if self.line_edit.is_some() => self.delete_line_points(),
-            Command::EditLine => self.enter_line_editor(),
-            Command::CopyStyles => self.copy_styles(),
-            Command::Flip(axis) => self.flip(axis),
-            Command::ToggleElementLock => self.toggle_element_lock(),
-            Command::PasteStyles => self.paste_styles(),
-            Command::Tool(tool) => {
-                self.tool = tool;
-                if tool != Tool::Selection {
-                    self.selected.clear();
-                }
-            }
-            Command::ToggleLock => {
-                self.locked = !self.locked;
-                if !self.locked {
-                    self.tool = Tool::Selection;
-                }
-            }
-            Command::Escape => self.tool = Tool::Selection,
-            Command::Finish if drawing => {}
-            Command::Finish => {
-                let selected: Vec<(String, Point)> = self
-                    .selection()
-                    .map(|e| (e.base.id.clone(), [e.base.x, e.base.y]))
-                    .collect();
-                if let [(id, at)] = &selected[..] {
-                    self.edit_element(id, *at);
-                }
-            }
-            Command::Delete => self.delete(),
-            Command::Duplicate => self.duplicate(),
-            Command::SelectAll => {
-                self.selected = self
-                    .top_level()
-                    .filter(|e| !e.is_locked())
-                    .map(|e| e.base.id.clone())
-                    .collect();
-            }
-            Command::Undo => {
-                if self.history.undo(&mut self.scene.elements) {
-                    self.prune_selection();
-                    self.prune_line_edit();
-                }
-            }
-            Command::Redo => {
-                if self.history.redo(&mut self.scene.elements) {
-                    self.prune_selection();
-                    self.prune_line_edit();
-                }
-            }
-            Command::Reorder(order) => self.reorder(order),
-            Command::Group => self.group(),
-            Command::Ungroup => self.ungroup(),
-            Command::LargerFont => self.step_font_size(FONT_STEP),
-            Command::SmallerFont => self.step_font_size(1.0 / FONT_STEP),
-            Command::Nudge(offset) => {
-                if !self.selected.is_empty() {
-                    self.history.record(self.scene.elements.clone());
-                    let moving = self.moving();
-                    let moved = moving
-                        .iter()
-                        .map(|(i, _)| self.scene.elements[*i].base.id.clone())
-                        .collect();
-                    for (i, [x, y]) in moving {
-                        self.place(i, [x + offset[0], y + offset[1]]);
-                    }
-                    self.update_bound_arrows(&moved);
                 }
             }
         }
