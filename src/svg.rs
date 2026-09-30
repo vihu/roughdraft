@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use crate::color::Rgba;
 use crate::geometry::{self, Affine};
 use crate::render::{self, Align, Drawing, FillRule, Item, Segment};
-use crate::scene::{Kind, Scene};
+use crate::scene::{Element, Kind, Scene};
 
 /// How to export.
 #[derive(Clone, Debug, PartialEq)]
@@ -148,7 +148,10 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
             write_drawing(&mut svg, &label, shift, scene);
         }
         if let Some(drawing) = render::render_element(element, background) {
-            write_drawing(&mut svg, &drawing, shift, scene);
+            match render::arrow_label(element, scene) {
+                Some(label) => write_masked(&mut svg, &drawing, shift, scene, element, label),
+                None => write_drawing(&mut svg, &drawing, shift, scene),
+            }
         }
         if clip.is_some() {
             svg.push_str("</g>");
@@ -175,6 +178,37 @@ fn write_drawing(svg: &mut String, drawing: &Drawing, shift: Affine, scene: &Sce
         write_item(svg, item, scene);
     }
     svg.push_str("</g>");
+}
+
+/// Writes a labelled arrow masked where its label is, followed by the mask,
+/// like Excalidraw's export: a white rect from the origin to the arrow's
+/// far corner plus 100, and a black one exactly the label's box.
+fn write_masked(
+    svg: &mut String,
+    drawing: &Drawing,
+    shift: Affine,
+    scene: &Scene,
+    element: &Element,
+    label: &Element,
+) {
+    /// Extra room the visible part of the mask reaches past the arrow.
+    const SPARE: f64 = 100.0;
+    let id = escape(&element.base.id);
+    let _ = write!(svg, r#"<g mask="url(#mask-{id})">"#);
+    write_drawing(svg, drawing, shift, scene);
+    svg.push_str("</g>");
+    let [x, y] = shift.apply([element.base.x, element.base.y]);
+    let [label_x, label_y] = shift.apply([label.base.x, label.base.y]);
+    let _ = write!(
+        svg,
+        r##"<mask id="mask-{id}"><rect x="0" y="0" fill="#fff" width="{}" height="{}"/><rect x="{}" y="{}" fill="#000" width="{}" height="{}" opacity="1"/></mask>"##,
+        num(element.base.width + SPARE + x),
+        num(element.base.height + SPARE + y),
+        num(label_x),
+        num(label_y),
+        num(label.base.width),
+        num(label.base.height),
+    );
 }
 
 fn write_item(svg: &mut String, item: &Item, scene: &Scene) {
@@ -388,6 +422,32 @@ fn escape(text: &str) -> String {
 mod tests {
     use super::{fixed, path_data};
     use crate::render::Segment;
+
+    #[test]
+    fn a_labelled_arrow_is_masked_where_its_label_is() {
+        let base = r##""angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"seed":1,"isDeleted":false"##;
+        let json = format!(
+            r##"{{"type":"excalidraw","elements":[
+                {{"id":"r","type":"arrow","x":100,"y":50,"width":200,"height":0,{base},"points":[[0,0],[200,0]],"boundElements":[{{"id":"t","type":"text"}}]}},
+                {{"id":"t","type":"text","x":170,"y":37.5,"width":60,"height":25,{base},"text":"hi","fontSize":20,"fontFamily":5,"textAlign":"center","verticalAlign":"middle","lineHeight":1.25,"containerId":"r"}}
+            ]}}"##
+        );
+        let scene: crate::scene::Scene = serde_json::from_str(&json).unwrap();
+        let svg = super::export(&scene, &super::SvgOptions::default());
+        assert!(svg.contains(r#"<g mask="url(#mask-r)">"#), "{svg}");
+        // Export padding 10: the arrow starts at (10, y) and the label's box
+        // at (80, y), so the visible rect is 200 + 100 + 10 wide.
+        let mask = &svg[svg.find(r#"<mask id="mask-r">"#).expect("the mask")..];
+        assert!(
+            mask.starts_with(r##"<mask id="mask-r"><rect x="0" y="0" fill="#fff" width="310""##),
+            "{mask}"
+        );
+        assert!(
+            mask.contains(r##"<rect x="80" "##)
+                && mask.contains(r##"fill="#000" width="60" height="25""##),
+            "{mask}"
+        );
+    }
 
     #[test]
     fn writes_the_background_as_stored_and_drops_xml_control_characters() {

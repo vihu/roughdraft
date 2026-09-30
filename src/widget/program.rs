@@ -11,6 +11,7 @@ use iced::{Point, Rectangle, Renderer, Theme};
 use super::camera::zoom_key;
 use super::keys::{code_shortcut, shortcut};
 use super::{Input, Message, Sketch};
+use crate::color::Rgba;
 use crate::edit::{self, Handle, Pointer, Tool};
 
 /// Transient input state of the canvas; pan and zoom live in [`Sketch`].
@@ -25,10 +26,25 @@ pub struct State {
     /// the style panel): keys belong to that widget until the next press
     /// on the canvas.
     unfocused: bool,
+    /// The point of a selected line under the pointer, last time it moved:
+    /// the canvas redraws when it changes, for the point's halo.
+    hovered_point: Option<[f64; 2]>,
 }
 
 /// Pixels per scrolled line.
 const LINE_HEIGHT: f64 = 50.0;
+
+/// Radius in screen pixels of the halo on a hovered line point
+/// (`POINT_HANDLE_SIZE`).
+const HALO_RADIUS: f32 = 10.0;
+
+/// The halo's colour: the selection violet at 40% (`highlightPoint`).
+const HALO: Rgba = Rgba {
+    r: 105.0 / 255.0,
+    g: 101.0 / 255.0,
+    b: 219.0 / 255.0,
+    a: 0.4,
+};
 
 /// Two presses closer than this in time and space are a double-click.
 const DOUBLE_CLICK: (Duration, f32) = (Duration::from_millis(500), 6.0);
@@ -124,6 +140,7 @@ impl canvas::Program<Message> for Sketch {
                     return None;
                 };
                 state.unfocused = false;
+                state.hovered_point = None;
                 let pans = *button == mouse::Button::Middle
                     || (*button == mouse::Button::Left
                         && (state.space || self.editor.tool() == Tool::Hand));
@@ -161,7 +178,14 @@ impl canvas::Program<Message> for Sketch {
                 } else if self.editor.wants_hover() {
                     Pointer::Hover
                 } else {
-                    return None;
+                    let hovered = self
+                        .editor
+                        .hovered_point(camera.scene_point(bounds, *position));
+                    if hovered == state.hovered_point {
+                        return None;
+                    }
+                    state.hovered_point = hovered;
+                    return Some(canvas::Action::request_redraw());
                 };
                 let at = camera.scene_point(bounds, *position);
                 publish(Input::Pointer(pointer, at, state.modifiers()))
@@ -208,11 +232,11 @@ impl canvas::Program<Message> for Sketch {
 
     fn draw(
         &self,
-        _state: &State,
+        state: &State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let size = bounds.size();
         if self.unplaced.replace(false) {
@@ -258,6 +282,20 @@ impl canvas::Program<Message> for Sketch {
         });
         let mut overlay = Frame::new(renderer, size);
         self.draw_overlay(&mut overlay, self.camera.get().zoom, view);
+        // The point of a selected line under the pointer gets a halo
+        // (`highlightPoint`).
+        let hovered = cursor
+            .position_over(bounds)
+            .filter(|_| !state.pressed && self.editor.tool() == Tool::Selection)
+            .and_then(|p| {
+                let at = self.camera.get().scene_point(bounds, p);
+                self.editor.hovered_point(at)
+            });
+        if let Some(point) = hovered {
+            let [x, y] = view.apply(point);
+            let halo = canvas::Path::circle(Point::new(x as f32, y as f32), HALO_RADIUS);
+            overlay.fill(&halo, self.paint(HALO));
+        }
         vec![
             below,
             dynamic.into_geometry(),
@@ -287,6 +325,11 @@ impl canvas::Program<Message> for Sketch {
             _ => return mouse::Interaction::Crosshair,
         }
         let at = self.camera.get().scene_point(bounds, position);
+        // A line's points and segment middles before its box's handles, like
+        // Excalidraw (`handleHoverSelectedLinearElement`).
+        if self.editor.over_line_handle(at) {
+            return mouse::Interaction::Pointer;
+        }
         if let Some(handle) = self.editor.handle_at(at) {
             return match handle {
                 Handle::N | Handle::S => mouse::Interaction::ResizingVertically,

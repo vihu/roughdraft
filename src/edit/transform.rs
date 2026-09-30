@@ -61,6 +61,21 @@ pub const HANDLE_SIZE: f64 = 8.0;
 /// Point handle radius in screen pixels (`POINT_HANDLE_SIZE / 2`).
 pub const POINT_RADIUS: f64 = 5.0;
 
+/// How near, in screen pixels, a point or segment middle of a selected
+/// line is under the pointer (`POINT_HANDLE_SIZE + 1`,
+/// `getPointIndexUnderCursor`, `getSegmentMidpointHitCoords`).
+const POINT_REACH: f64 = 11.0;
+
+/// A point or segment middle of the selected line or arrow.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum LinePart {
+    /// A point, by index.
+    Point(usize),
+    /// A segment middle: where a point dragged from it is inserted, and
+    /// where it is.
+    Middle(usize, Point),
+}
+
 /// Segments shorter than this on screen get no midpoint handle
 /// (`isSegmentTooShort`: `POINT_HANDLE_SIZE * 4`).
 const MIDPOINT_MIN_LENGTH: f64 = 40.0;
@@ -85,6 +100,29 @@ pub(super) struct Frame {
 
 // Public API
 impl Editor {
+    /// The point of the selected line or arrow under `at`, which the
+    /// overlay rings (`highlightPoint`); none for points already selected
+    /// in the line editor.
+    pub fn hovered_point(&self, at: Point) -> Option<Point> {
+        let LinePart::Point(index) = self.line_part_at(at)? else {
+            return None;
+        };
+        if self
+            .line_edit
+            .as_ref()
+            .is_some_and(|edit| edit.selected.contains(&index))
+        {
+            return None;
+        }
+        self.handles()?.points.get(index).copied()
+    }
+
+    /// Whether a point or segment middle of the selected line or arrow is
+    /// under `at`, where a press drags it (the pointer cursor).
+    pub fn over_line_handle(&self, at: Point) -> bool {
+        self.line_part_at(at).is_some()
+    }
+
     /// Returns the handles for the current selection, if it has any.
     pub fn handles(&self) -> Option<Handles> {
         if self.text.is_some() || !matches!(self.gesture, None | Some(Gesture::Resize { .. })) {
@@ -246,27 +284,12 @@ impl Editor {
     /// Starts a resize, rotation or point drag when `at` is on a handle. A
     /// press on a 2-point line's midpoint adds a point there and drags it.
     pub(super) fn press_handle(&mut self, at: Point, modifiers: Modifiers) -> bool {
-        let handles = self.handles();
-        // Line editor points are drawn twice as large (`POINT_HANDLE_SIZE`).
-        let radius = if self.line_edit.is_some() {
-            2.0 * POINT_RADIUS
-        } else {
-            POINT_RADIUS
-        };
-        let reach = (radius + 2.0) / self.zoom;
-        let near = |p: &Point| (p[0] - at[0]).hypot(p[1] - at[1]) <= reach;
-        let point = handles
-            .as_ref()
-            .and_then(|h| h.points.iter().position(near));
-        let midpoint = handles
-            .as_ref()
-            .and_then(|h| h.midpoints.iter().copied().find(|(_, p)| near(p)));
-        if point.is_some() || midpoint.is_some() {
+        if let Some(part) = self.line_part_at(at) {
             let index = self.selection_indices()[0];
             let before = self.scene.elements.clone();
-            let which = match (point, midpoint) {
-                (Some(which), _) => which,
-                (None, Some((insert, middle))) => {
+            let which = match part {
+                LinePart::Point(which) => which,
+                LinePart::Middle(insert, middle) => {
                     // On the grid, the new point starts at the pointer's grid
                     // point (`addMidpoint`).
                     let point = if self.grid_size(modifiers).is_some() {
@@ -280,7 +303,6 @@ impl Editor {
                     }
                     insert
                 }
-                (None, None) => unreachable!("checked above"),
             };
             self.gesture = Some(if self.line_edit.is_some() {
                 let mut gesture = self.press_line_point(index, which, at, modifiers);
@@ -290,10 +312,14 @@ impl Editor {
                 }
                 gesture
             } else {
+                // Grabbed a little off the point, it moves without a jump.
+                let point = self.handles().and_then(|h| h.points.get(which).copied());
+                let offset = point.map_or([0.0, 0.0], |[x, y]| [at[0] - x, at[1] - y]);
                 Gesture::Endpoint {
                     index,
                     which,
                     before,
+                    offset,
                 }
             });
             return true;
@@ -416,12 +442,15 @@ impl Editor {
                 index,
                 which,
                 before,
+                offset,
             }) => {
-                self.drag_endpoint(index, which, at, modifiers);
+                let point = [at[0] - offset[0], at[1] - offset[1]];
+                self.drag_endpoint(index, which, point, modifiers);
                 self.gesture = Some(Gesture::Endpoint {
                     index,
                     which,
                     before,
+                    offset,
                 });
             }
             Some(Gesture::Points {
@@ -460,4 +489,24 @@ impl Editor {
 
 fn ids(start: &[(usize, Element)]) -> std::collections::HashSet<String> {
     start.iter().map(|(_, e)| e.base.id.clone()).collect()
+}
+
+// Private API
+impl Editor {
+    /// The point or segment middle of the selected line or arrow under
+    /// `at`, within 11 screen pixels; points first, the last one first
+    /// (drawn on top).
+    fn line_part_at(&self, at: Point) -> Option<LinePart> {
+        let handles = self.handles()?;
+        let reach = POINT_REACH / self.zoom;
+        let near = |p: &Point| (p[0] - at[0]).hypot(p[1] - at[1]) < reach;
+        if let Some(index) = handles.points.iter().rposition(near) {
+            return Some(LinePart::Point(index));
+        }
+        handles
+            .midpoints
+            .iter()
+            .find(|(_, p)| near(p))
+            .map(|&(insert, middle)| LinePart::Middle(insert, middle))
+    }
 }

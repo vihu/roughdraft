@@ -79,7 +79,8 @@ fn bound_arrow_follows_its_shape() {
 fn dragging_the_arrow_away_unbinds_it() {
     let mut editor = bound();
     editor.command(Command::Tool(Tool::Selection));
-    drag(&mut editor, [-60.0, 50.0], [-60.0, 300.0]);
+    // On the body, clear of the midpoint handle at -52.5 (11 px reach).
+    drag(&mut editor, [-75.0, 50.0], [-75.0, 300.0]);
     let (rect, arrow) = (&editor.scene().elements[0], &editor.scene().elements[1]);
     assert!(arrow.binding(ArrowEnd::End).is_none());
     assert!(

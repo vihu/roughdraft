@@ -219,11 +219,13 @@ enum Gesture {
         start: Vec<(usize, Element)>,
         center: Point,
     },
-    /// Dragging one point of a line or arrow.
+    /// Dragging one point of a line or arrow; `offset` from the point to
+    /// where it was grabbed stays while dragging (`pointerOffset`).
     Endpoint {
         index: usize,
         which: usize,
         before: Vec<Element>,
+        offset: Point,
     },
     /// Erasing: what the pointer passed over since the press.
     Erase {

@@ -412,3 +412,30 @@ fn freedraw_strokes_select_on_their_path_and_resize_their_points() {
         "points keep JavaScript's number spelling"
     );
 }
+
+#[test]
+fn a_selected_arrows_points_and_middle_are_in_reach_within_11_px() {
+    let mut editor = Editor::new(Scene::default());
+    editor.command(Command::Tool(Tool::Arrow));
+    drag(&mut editor, [0.0, 0.0], [200.0, 0.0], NONE);
+    // Excalidraw's reach: 11 screen px around a point or segment middle.
+    assert_eq!(editor.hovered_point([190.0, 3.0]), Some([200.0, 0.0]));
+    assert!(editor.over_line_handle([190.0, 3.0]));
+    assert!(editor.over_line_handle([100.0, 10.0]), "the middle");
+    assert_eq!(
+        editor.hovered_point([100.0, 0.0]),
+        None,
+        "no halo on a middle"
+    );
+    assert!(!editor.over_line_handle([50.0, 0.0]), "the body");
+    // Zoomed in 2x, 11 px is 5.5 units.
+    editor.set_zoom(2.0);
+    assert_eq!(editor.hovered_point([194.0, 0.0]), None);
+    assert!(editor.hovered_point([195.0, 0.0]).is_some());
+    // A press there drags the point.
+    drag(&mut editor, [195.0, 0.0], [195.0, 40.0], NONE);
+    let Kind::Arrow(line) = &editor.scene().elements[0].kind else {
+        panic!("arrow")
+    };
+    assert_eq!(line.points[1], [200.0, 40.0]);
+}

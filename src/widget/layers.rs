@@ -10,6 +10,7 @@ use super::{Rendered, Sketch, paint};
 use crate::edit;
 use crate::geometry::{self, Affine, Bounds};
 use crate::render::{self, Drawing, Item, Segment};
+use crate::scene::{Element, Scene};
 
 /// Gap between the content and the canvas edge on open, like Excalidraw's
 /// SVG export padding.
@@ -33,7 +34,7 @@ impl Sketch {
 
         for element in render::draw_order(scene) {
             let id = &element.base.id;
-            let revision = element.revision();
+            let revision = revision(element, scene);
             let live = active.contains(id);
             let rendered = match previous.remove(id) {
                 // A stale drawing is only good while its gesture lasts.
@@ -52,7 +53,7 @@ impl Sketch {
                     Rendered {
                         revision,
                         drawing: (!live)
-                            .then(|| render::render_element(element, background))
+                            .then(|| draw_element(element, scene, background))
                             .flatten(),
                         stale: live,
                         label: render::frame_label(element),
@@ -137,7 +138,7 @@ impl Sketch {
             .iter()
             .filter(|e| stale.contains(e.base.id.as_str()))
             .filter_map(|e| {
-                let drawing = render::render_element(e, background)?;
+                let drawing = draw_element(e, scene, background)?;
                 Some((e.base.id.as_str(), drawing))
             })
             .collect()
@@ -293,5 +294,28 @@ pub(super) fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) ->
         [min[0] - PADDING, min[1] - PADDING]
     } else {
         [0.0, 0.0]
+    }
+}
+
+/// Renders an element as the canvas shows it: a labelled arrow's line
+/// stops short of its label.
+fn draw_element(element: &Element, scene: &Scene, background: &str) -> Option<Drawing> {
+    let drawing = render::render_element(element, background)?;
+    Some(match render::arrow_label(element, scene) {
+        Some(label) => render::cut_gap(&drawing, render::label_gap(label)),
+        None => drawing,
+    })
+}
+
+/// An element's revision for the drawing cache; an arrow's includes its
+/// label's, since the label cuts its line.
+fn revision(element: &Element, scene: &Scene) -> (i64, i64) {
+    let (version, nonce) = element.revision();
+    match render::arrow_label(element, scene) {
+        Some(label) => {
+            let (label_version, label_nonce) = label.revision();
+            (version.wrapping_add(label_version), nonce ^ label_nonce)
+        }
+        None => (version, nonce),
     }
 }

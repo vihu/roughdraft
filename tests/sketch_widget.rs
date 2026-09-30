@@ -518,3 +518,37 @@ fn style_sections_show_only_where_they_apply() {
         "filled box"
     );
 }
+
+#[test]
+fn a_selected_arrow_shows_the_pointer_over_its_points_and_middle() {
+    use iced::widget::canvas::Program;
+    let json = r##"{"type":"excalidraw","elements":[{"id":"r","type":"arrow","x":100,"y":100,"width":200,"height":0,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null,"points":[[0,0],[200,0]]}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    // Select it with a click on its body.
+    run(&mut sketch, |ui| {
+        ui.point_at(Point::new(150.0, 100.0));
+        ui.simulate([Event::Mouse(mouse::Event::ButtonPressed(Button::Left))]);
+        ui.simulate([Event::Mouse(mouse::Event::ButtonReleased(Button::Left))]);
+    });
+    let bounds = iced::Rectangle::with_size(iced::Size::new(800.0, 600.0));
+    let state = <Sketch as Program<roughdraft::widget::Message>>::State::default();
+    let cursor_at =
+        |x, y| sketch.mouse_interaction(&state, bounds, mouse::Cursor::Available(Point::new(x, y)));
+    assert_eq!(
+        cursor_at(104.0, 102.0),
+        mouse::Interaction::Pointer,
+        "start point"
+    );
+    assert_eq!(
+        cursor_at(300.0, 100.0),
+        mouse::Interaction::Pointer,
+        "end point"
+    );
+    assert_eq!(
+        cursor_at(200.0, 106.0),
+        mouse::Interaction::Pointer,
+        "middle"
+    );
+    assert_eq!(cursor_at(150.0, 100.0), mouse::Interaction::Move, "body");
+}
