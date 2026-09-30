@@ -57,6 +57,56 @@ impl Editor {
         }
     }
 
+    /// After a drag, the dragged elements join the frame they were dropped
+    /// on if they overlap it, and leave their frame otherwise
+    /// (`handleCanvasPointerUp`: `addElementsToFrame`, then
+    /// `updateFrameMembershipOfSelectedElements`). A child whose frame is
+    /// selected too keeps it.
+    // ponytail: box overlap, element by element; Excalidraw intersects the
+    // outlines and moves groups in or out whole
+    pub(super) fn update_frame_membership(&mut self, at: Point) {
+        let box_of = |e: &Element| {
+            let b = &e.base;
+            [b.x, b.y, b.x + b.width, b.y + b.height]
+        };
+        // The topmost unselected frame under the pointer
+        // (`getTopLayerFrameAtSceneCoords`).
+        let target: Option<(String, [f64; 4])> = self
+            .scene
+            .elements
+            .iter()
+            .rev()
+            .filter(|e| !e.base.is_deleted && e.frame_title().is_some())
+            .filter(|e| !self.selected.contains(&e.base.id))
+            .find(|e| {
+                let [x1, y1, x2, y2] = box_of(e);
+                (x1..=x2).contains(&at[0]) && (y1..=y2).contains(&at[1])
+            })
+            .map(|e| (e.base.id.clone(), box_of(e)));
+        let changes: Vec<(String, Option<String>)> = self
+            .selection()
+            .filter(|e| e.frame_title().is_none() && container_id(e).is_none())
+            .filter(|e| !e.frame_id().is_some_and(|f| self.selected.contains(f)))
+            .filter_map(|e| {
+                let [x1, y1, x2, y2] = geometry::element_bounds(e);
+                let joins = target.as_ref().filter(|(_, [fx1, fy1, fx2, fy2])| {
+                    x1 <= *fx2 && x2 >= *fx1 && y1 <= *fy2 && y2 >= *fy1
+                });
+                let next = joins.map(|(id, _)| id.clone());
+                (e.frame_id() != next.as_deref()).then(|| (e.base.id.clone(), next))
+            })
+            .collect();
+        for (id, frame) in changes {
+            let value = frame.map_or(serde_json::Value::Null, Into::into);
+            for element in self.scene.elements.iter_mut().filter(|e| {
+                !e.base.is_deleted && (e.base.id == id || container_id(e) == Some(id.as_str()))
+            }) {
+                element.json_mut().insert("frameId".into(), value.clone());
+                element.touch();
+            }
+        }
+    }
+
     /// [`Editor::moving`] plus the children of selected frames and their
     /// labels (`includeElementsInFrames`): what drags, nudges, duplicates,
     /// copies, flips and locks along with a frame.

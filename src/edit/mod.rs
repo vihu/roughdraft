@@ -376,7 +376,7 @@ impl Editor {
             }
             Pointer::Hover => self.hover = Some(at),
             Pointer::Up => {
-                if !self.erase_release() && !self.select_release() {
+                if !self.erase_release() && !self.select_release(at) {
                     self.create_release(at);
                 }
             }

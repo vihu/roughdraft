@@ -148,3 +148,29 @@ fn the_frame_tool_takes_in_what_lies_wholly_inside() {
     editor.command(Command::Undo);
     assert_eq!(get(&editor, "free").frame_id(), None, "one undo step each");
 }
+
+#[test]
+fn dragging_into_or_out_of_a_frame_changes_membership() {
+    let mut editor = editor();
+    let move_by = |editor: &mut Editor, from: [f64; 2], by: [f64; 2]| {
+        let to = [from[0] + by[0], from[1] + by[1]];
+        drag(editor, from, from, Modifiers::default());
+        drag(editor, from, to, Modifiers::default());
+    };
+    // The free diamond, grabbed on its outline, dropped inside frame "one".
+    move_by(&mut editor, [150.0, 260.0], [-60.0, -150.0]);
+    assert_eq!(get(&editor, "free").frame_id(), Some("one"));
+    // Dragged within the frame, "inside" stays; dragged far off, it leaves.
+    // (Grabbed right of the diamond, which now sits over its left part.)
+    move_by(&mut editor, [250.0, 100.0], [0.0, 10.0]);
+    assert_eq!(get(&editor, "inside").base.y, 70.0);
+    assert_eq!(get(&editor, "inside").frame_id(), Some("one"));
+    move_by(&mut editor, [250.0, 110.0], [0.0, 400.0]);
+    assert_eq!(get(&editor, "inside").frame_id(), None);
+    editor.command(Command::Undo);
+    assert_eq!(
+        get(&editor, "inside").frame_id(),
+        Some("one"),
+        "one undo step with the move"
+    );
+}

@@ -207,7 +207,7 @@ impl Editor {
     }
 
     /// Ends a move or box select; returns `false` for other gestures.
-    pub(super) fn select_release(&mut self) -> bool {
+    pub(super) fn select_release(&mut self, at: Point) -> bool {
         match self.gesture.take() {
             Some(Gesture::Move {
                 before,
@@ -219,6 +219,7 @@ impl Editor {
                 for (index, _) in starts {
                     self.bind_arrow_ends(index);
                 }
+                self.update_frame_membership(at);
                 self.history.record(before);
             }
             Some(Gesture::Move {
