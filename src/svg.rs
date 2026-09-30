@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use crate::color::Rgba;
 use crate::geometry::Affine;
 use crate::render::{self, Align, FillRule, Item, Segment};
-use crate::scene::Scene;
+use crate::scene::{Kind, Scene};
 
 /// How to export.
 #[derive(Clone, Debug, PartialEq)]
@@ -17,8 +17,9 @@ pub struct SvgOptions {
     pub background: bool,
     /// Apply Excalidraw's dark filter to the whole image.
     pub dark: bool,
-    /// Embed Excalifont so the file renders the same everywhere (adds about
-    /// 256 KB); otherwise text names the font and relies on the viewer.
+    /// Embed the bundled fonts the text uses, so the file renders the same
+    /// everywhere (Excalifont alone adds about 256 KB); otherwise text names
+    /// the font and relies on the viewer.
     pub embed_fonts: bool,
 }
 
@@ -61,11 +62,26 @@ pub fn export(scene: &Scene, options: &SvgOptions) -> String {
         h = num(height),
     );
     if options.embed_fonts {
-        let font = crate::base64::encode(crate::fonts::EXCALIFONT);
-        let _ = write!(
-            svg,
-            r#"<defs><style class="style-fonts">@font-face {{ font-family: Excalifont; src: url(data:font/ttf;base64,{font}); }}</style></defs>"#
-        );
+        let used: std::collections::BTreeSet<u32> = elements
+            .iter()
+            .filter_map(|e| match &e.kind {
+                Kind::Text(text) => Some(text.font_family),
+                _ => None,
+            })
+            .collect();
+        svg.push_str(r#"<defs><style class="style-fonts">"#);
+        for id in used {
+            let Some(font) = crate::fonts::for_family(id) else {
+                continue;
+            };
+            let name = font_family(id).split(',').next().unwrap_or_default();
+            let font = crate::base64::encode(font);
+            let _ = write!(
+                svg,
+                "@font-face {{ font-family: {name}; src: url(data:font/ttf;base64,{font}); }}"
+            );
+        }
+        svg.push_str("</style></defs>");
     }
     if options.background {
         let background = Rgba::parse(scene.background_color()).unwrap_or(Rgba::WHITE);
@@ -255,6 +271,34 @@ fn escape(text: &str) -> String {
 mod tests {
     use super::{fixed, path_data};
     use crate::render::Segment;
+
+    #[test]
+    fn embeds_each_bundled_font_the_text_uses() {
+        let json = std::fs::read_to_string("tests/fixtures/scenes/fonts.excalidraw").unwrap();
+        let mut scene: crate::scene::Scene = serde_json::from_str(&json).unwrap();
+        let options = super::SvgOptions {
+            embed_fonts: true,
+            ..Default::default()
+        };
+        let svg = super::export(&scene, &options);
+        for name in [
+            "Virgil",
+            "Excalifont",
+            "Nunito",
+            "Lilita One",
+            "Comic Shanns",
+        ] {
+            assert!(
+                svg.contains(&format!(
+                    "@font-face {{ font-family: {name}; src: url(data:font/ttf;base64,"
+                )),
+                "{name}"
+            );
+        }
+        scene.elements.retain(|e| e.base.id == "t6");
+        let svg = super::export(&scene, &options);
+        assert_eq!(svg.matches("@font-face").count(), 1, "only Nunito");
+    }
 
     #[test]
     fn numbers_and_paths_match_rough_js() {

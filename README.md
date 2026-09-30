@@ -6,7 +6,8 @@ in excalidraw.com unchanged, and the other way round.
 
 - Same `seed`, same wobble: shapes are drawn with a seed-exact port of
   rough.js 4.6.4, the version Excalidraw 0.18 uses.
-- Text in Excalifont, measured and wrapped like Excalidraw does it.
+- Text in Excalidraw's own fonts (Excalifont, Virgil, Nunito, Lilita One,
+  Comic Shanns, all bundled), measured and wrapped like Excalidraw does it.
 - Lossless: unknown fields and element types round-trip byte for byte.
 - An iced-free core (`scene`, `render`, `edit`, `svg`), so scenes can be
   edited, tested and exported to SVG without a window.
@@ -78,7 +79,7 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 | Area | Supported |
 | --- | --- |
 | Shapes | Rectangle, diamond, ellipse; lines and arrows, straight or multi-point, with every Excalidraw arrowhead |
-| Text | Free text and labels inside shapes, wrapped to the container, in Excalifont |
+| Text | Free text and labels inside shapes, wrapped to the container, in Excalidraw's fonts |
 | Images | Rendered from `files[id].dataURL`; insert and paste |
 | Editing | Select, box select, move, resize, rotate, delete, duplicate, undo/redo, z-order, group, arrow binding |
 | Style | Stroke and background color, fill (hachure, cross-hatch, solid), stroke width and style, sloppiness, edges, opacity, arrowheads, font size, family and alignment |
@@ -87,8 +88,8 @@ elsewhere (not as data URLs) are supplied with `Sketch::set_image`.
 
 Not supported: freedraw, frames, embeds, laser, elbow arrow routing (drawn as
 polylines), image crop, snapping, collaboration. Elements of these types are
-kept and saved untouched. Only Excalifont is bundled so far; other font
-families render in a fallback.
+kept and saved untouched. Helvetica, Cascadia and Liberation Sans are not
+bundled and render in the system sans or monospace font.
 
 ## Playground
 
@@ -115,8 +116,9 @@ mode.
 
 ## Licence
 
-Not decided yet. Excalifont is under the SIL Open Font License 1.1
-(`assets/fonts/Excalifont/OFL.txt`).
+Not decided yet. The bundled fonts keep their own licences, next to each
+font under `assets/fonts/`: Excalifont, Virgil, Nunito and Lilita One are
+under the SIL Open Font License 1.1, Comic Shanns under MIT.
 
 [iced]: https://github.com/iced-rs/iced
 [Excalidraw]: https://excalidraw.com

@@ -10,7 +10,7 @@ use iced::widget::text_editor::{self, Binding, KeyPress, Motion, Status};
 use iced::widget::{operation, pin};
 use iced::{Background, Border, Color, Element, Pixels, Point, Task, Theme};
 
-use super::{EXCALIFONT, Input, Message, Sketch, paint};
+use super::{Input, Message, Sketch, paint};
 use crate::color::Rgba;
 use crate::edit::Measure;
 use crate::hit::container_id;
@@ -22,13 +22,16 @@ const TEXT_EDITOR: &str = "roughdraft-text";
 /// Gap between a container's edge and its label (`BOUND_TEXT_PADDING`).
 const LABEL_PADDING: f64 = 5.0;
 
-/// Loads the bundled fonts into iced's font system, so text draws and
-/// measures in Excalifont without the host registering it.
+/// Loads the bundled fonts into iced's font system once, so text draws and
+/// measures in Excalidraw's fonts without the host registering them.
 pub(super) fn load_fonts() {
-    font_system()
-        .write()
-        .expect("font system lock")
-        .load_font(Cow::Borrowed(EXCALIFONT));
+    static LOADED: std::sync::Once = std::sync::Once::new();
+    LOADED.call_once(|| {
+        let mut system = font_system().write().expect("font system lock");
+        for font in crate::fonts::ALL {
+            system.load_font(Cow::Borrowed(font));
+        }
+    });
 }
 
 /// [`Measure`] backed by iced's text engine, with shaping.

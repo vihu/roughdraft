@@ -30,7 +30,7 @@ use iced::keyboard::{self, key};
 use iced::widget::{center, text};
 use iced::{Element, Subscription, Task};
 use roughdraft::scene::Scene;
-use roughdraft::widget::{self, Appearance, EXCALIFONT, Sketch};
+use roughdraft::widget::{self, Appearance, Sketch};
 use serde_json::Value;
 
 const USAGE: &str = "usage: playground [file.excalidraw | keeprs-memo.json] [--snapshot out.png] [--dark] [--origin x,y]";
@@ -87,7 +87,7 @@ pub fn main() -> iced::Result {
         Playground::view,
     )
     .title(Playground::title)
-    .fonts([EXCALIFONT])
+    .fonts(roughdraft::fonts::ALL)
     .subscription(Playground::subscription)
     .run()
 }
@@ -259,7 +259,7 @@ async fn save_file(path: Option<PathBuf>, json: String) -> Result<PathBuf, Strin
 
 fn write_snapshot(sketch: &Sketch, png: &str) -> Result<(), String> {
     let settings = iced::Settings {
-        fonts: vec![EXCALIFONT.into()],
+        fonts: roughdraft::fonts::ALL.map(Into::into).to_vec(),
         ..iced::Settings::default()
     };
     let mut simulator = iced_test::Simulator::with_size(settings, SNAPSHOT_SIZE, sketch.canvas());

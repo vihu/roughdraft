@@ -101,8 +101,19 @@ fn draw_text(
 // ponytail: only Excalifont is bundled; add Virgil, Cascadia, Nunito, ... when a fixture needs them
 pub(super) fn font(family: u32) -> Font {
     match family {
+        1 => Font::new("Virgil"),
+        // The bundled cut is weight 500, like Excalidraw's.
+        6 => Font {
+            weight: iced::font::Weight::Medium,
+            ..Font::new("Nunito")
+        },
+        7 => Font::new("Lilita One"),
+        // The font's own family name.
+        8 => Font::new("Comic Shanns Regular"),
+        // ponytail: Cascadia is not bundled (Reserved Font Name, unclear
+        // whether Excalidraw's copy is a subset); Helvetica cannot be.
         3 => Font::MONOSPACE,
-        2 | 6 | 9 => Font::DEFAULT,
+        2 | 9 => Font::DEFAULT,
         _ => Font::new("Excalifont"),
     }
 }
