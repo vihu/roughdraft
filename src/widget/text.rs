@@ -3,7 +3,7 @@
 //! drawn.
 use std::borrow::Cow;
 
-use iced::advanced::graphics::text::{cosmic_text, font_system};
+use iced::advanced::graphics::text::{cosmic_text, font_system, to_attributes};
 use iced::keyboard::{Key, key::Named};
 use iced::widget::text::{LineHeight, Wrapping};
 use iced::widget::text_editor::{self, Binding, KeyPress, Motion, Status};
@@ -51,20 +51,13 @@ impl Measure for CosmicMeasure {
         let raw = system.raw();
         let size = font_size as f32;
         let buffer = cosmic_text::Buffer::new(raw, cosmic_text::Metrics::new(size, size));
-        let family = match paint::font(font_family).family {
-            iced::font::Family::Name(name) => cosmic_text::Family::Name(name),
-            iced::font::Family::Monospace => cosmic_text::Family::Monospace,
-            _ => cosmic_text::Family::SansSerif,
-        };
+        // The attributes the renderer draws with: the family alone would
+        // ask for weight 400 and miss Nunito, whose cut is 500.
+        let attrs = to_attributes(paint::font(font_family));
         let mut buffer = buffer;
         let mut buffer = buffer.borrow_with(raw);
         buffer.set_size(None, None);
-        buffer.set_text(
-            line,
-            &cosmic_text::Attrs::new().family(family),
-            cosmic_text::Shaping::Advanced,
-            None,
-        );
+        buffer.set_text(line, &attrs, cosmic_text::Shaping::Advanced, None);
         buffer.shape_until_scroll(false);
         f64::from(
             buffer
