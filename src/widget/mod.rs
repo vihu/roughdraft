@@ -7,6 +7,7 @@ mod camera;
 mod icons;
 mod keys;
 mod layers;
+mod menu;
 mod overlay;
 mod paint;
 mod picture;
@@ -21,14 +22,16 @@ use iced::widget::{stack, text_editor};
 use iced::{Color, Element, Length, Task};
 
 use camera::{Camera, ZoomKey};
-use picture::{Picture, decode_image, encode_png};
+use layers::content_origin;
+use picture::{Picture, encode_png};
 
 use crate::color::Rgba;
 use crate::edit::{self, Command, Editor, Pointer};
 use crate::geometry::{self, Bounds};
-use crate::render::{self, Drawing, Item, Segment};
+use crate::render::Drawing;
 use crate::scene::Scene;
 
+pub use self::menu::Request;
 pub use crate::fonts::EXCALIFONT;
 
 /// Canvas color scheme, like Excalidraw's theme toggle.
@@ -70,6 +73,9 @@ pub struct Sketch {
     viewport: std::cell::Cell<iced::Size>,
     /// A colour being typed in the style panel, until the next click.
     color_draft: Option<(ui::ColorField, String)>,
+    /// Host actions the main menu offers, and whether it is open.
+    menu: Vec<Request>,
+    menu_open: bool,
 }
 
 /// An element as last rendered.
@@ -82,7 +88,8 @@ struct Rendered {
     label: Option<Drawing>,
     /// The frame this element is clipped to, if any (`frameId`).
     frame: Option<String>,
-    /// Box to cull against: the element's bounds plus [`CULL_MARGIN`].
+    /// Box to cull against: the element's bounds plus a margin for the
+    /// wobble and arrowheads (`layers::CULL_MARGIN`).
     extent: Bounds,
 }
 
@@ -118,15 +125,13 @@ enum Input {
     Pasted(geometry::Point, Option<String>),
     /// A clipboard image: width, height, RGBA pixels.
     PastedImage(geometry::Point, u32, u32, std::sync::Arc<Vec<u8>>),
+    /// The main menu button.
+    ToggleMenu,
+    /// A host action from the main menu; see [`Message::request`].
+    Request(Request),
+    /// The main menu's dark/light switch.
+    ToggleAppearance,
 }
-
-/// Gap between the content and the canvas edge on open, like Excalidraw's
-/// SVG export padding.
-const PADDING: f64 = 10.0;
-
-/// Scene units added around an element's box before culling it: covers the
-/// rough wobble, stroke width and arrowheads, which reach past the box.
-const CULL_MARGIN: f64 = 50.0;
 
 /// Screen pixels between an element and its selection border.
 const SELECTION_PADDING: f64 = 4.0;
@@ -159,6 +164,8 @@ impl Sketch {
             undecodable: std::collections::HashSet::new(),
             viewport: std::cell::Cell::new(iced::Size::new(800.0, 600.0)),
             color_draft: None,
+            menu: Vec::new(),
+            menu_open: false,
         };
         sketch.refresh();
         let origin = content_origin(sketch.drawings());
@@ -186,6 +193,10 @@ impl Sketch {
             Input::Pointer(Pointer::Down, ..) | Input::Command(_) | Input::Style(_)
         ) {
             self.color_draft = None;
+        }
+        // Anything but the menu button closes the menu.
+        if !matches!(message.0, Input::ToggleMenu) {
+            self.menu_open = false;
         }
         let task = match message.0 {
             Input::Pointer(pointer, at, modifiers) => {
@@ -266,6 +277,19 @@ impl Sketch {
                 self.color_draft = Some((field, text));
                 Task::none()
             }
+            Input::ToggleMenu => {
+                self.menu_open = !self.menu_open;
+                Task::none()
+            }
+            // The host carries it out (`Message::request`).
+            Input::Request(_) => Task::none(),
+            Input::ToggleAppearance => {
+                self.set_appearance(match self.appearance {
+                    Appearance::Light => Appearance::Dark,
+                    Appearance::Dark => Appearance::Light,
+                });
+                Task::none()
+            }
             Input::FinishText => {
                 self.editor.finish_text();
                 Task::none()
@@ -335,6 +359,8 @@ impl Sketch {
     pub fn view(&self) -> Element<'_, Message> {
         let mut layers = vec![self.canvas(), self.toolbar(), self.footer()];
         layers.extend(self.style_panel());
+        // Last, so the open menu lies over the style panel.
+        layers.push(self.menu());
         iced::widget::Stack::with_children(layers).into()
     }
 
@@ -351,125 +377,6 @@ impl Sketch {
 
 // Private API
 impl Sketch {
-    /// Re-renders elements whose revision changed and invalidates the
-    /// static layers when anything outside the current gesture changed.
-    fn refresh(&mut self) {
-        let scene = self.editor.scene();
-        let background = scene.background_color();
-        let active: Vec<String> = self.editor.active().into_iter().map(String::from).collect();
-        let mut previous = std::mem::take(&mut self.drawings);
-        let mut order = Vec::new();
-        let mut static_changed = active != self.active;
-
-        for element in render::draw_order(scene) {
-            let id = &element.base.id;
-            let revision = element.revision();
-            let rendered = match previous.remove(id) {
-                Some(cached) if cached.revision == revision => cached,
-                _ => {
-                    // A frame resized alone re-clips children that sit on
-                    // the static layers.
-                    let clips_static = element.frame_title().is_some()
-                        && scene.elements.iter().any(|e| {
-                            !e.base.is_deleted
-                                && e.frame_id() == Some(id.as_str())
-                                && !active.contains(&e.base.id)
-                        });
-                    static_changed |= !active.contains(id) || clips_static;
-                    let [x1, y1, x2, y2] = geometry::element_bounds(element);
-                    Rendered {
-                        revision,
-                        drawing: render::render_element(element, background),
-                        label: render::frame_label(element),
-                        frame: element.frame_id().map(String::from),
-                        extent: [
-                            x1 - CULL_MARGIN,
-                            y1 - CULL_MARGIN,
-                            x2 + CULL_MARGIN,
-                            y2 + CULL_MARGIN,
-                        ],
-                    }
-                }
-            };
-            if rendered.drawing.is_some() {
-                order.push(id.clone());
-            }
-            self.drawings.insert(id.clone(), rendered);
-        }
-        for element in scene.elements.iter().filter(|e| !e.base.is_deleted) {
-            let Some(id) = element.file_id() else {
-                continue;
-            };
-            let whole = Picture::of(id, None, [false, false]);
-            if !self.images.contains_key(&whole) && !self.undecodable.contains(id) {
-                let handle = scene
-                    .file_data_url(id)
-                    .and_then(crate::base64::decode_data_url)
-                    .and_then(|(_, bytes)| decode_image(&bytes));
-                match handle {
-                    Some(handle) => {
-                        self.images.insert(whole.clone(), handle);
-                        static_changed = true;
-                    }
-                    // A file the scene does not hold yet may come later
-                    // (`set_image`, a paste that brings it).
-                    None if scene.file_data_url(id).is_some() => {
-                        self.undecodable.insert(id.to_owned());
-                    }
-                    None => {}
-                }
-            }
-            // A cut or mirrored view comes from the whole picture's pixels.
-            let crop = element
-                .image_crop()
-                .map(|(rect, natural)| render::Crop { rect, natural });
-            let picture = Picture::of(id, crop.as_ref(), element.image_flip());
-            if picture != whole
-                && !self.images.contains_key(&picture)
-                && let Some(handle) = self
-                    .images
-                    .get(&whole)
-                    .and_then(|w| picture.derive(w, crop.as_ref()))
-            {
-                self.images.insert(picture, handle);
-                static_changed = true;
-            }
-        }
-        static_changed |= !previous.is_empty() || order != self.order;
-        self.order = order;
-        self.active = active;
-        if static_changed {
-            self.clear_caches();
-        }
-    }
-
-    fn drawings(&self) -> impl Iterator<Item = &Drawing> {
-        self.order
-            .iter()
-            .filter_map(|id| self.drawings[id].drawing.as_ref())
-    }
-
-    /// Centres the live elements in a view of `size` at the camera's zoom.
-    fn centre_content(&self, size: iced::Size) {
-        let live: Vec<&crate::scene::Element> = self
-            .editor
-            .scene()
-            .elements
-            .iter()
-            .filter(|e| !e.base.is_deleted)
-            .collect();
-        if live.is_empty() {
-            return;
-        }
-        let [x1, y1, x2, y2] = edit::common_bounds(live.into_iter());
-        let mut camera = self.camera.get();
-        camera.origin = [
-            (x1 + x2) / 2.0 - f64::from(size.width) / 2.0 / camera.zoom,
-            (y1 + y2) / 2.0 - f64::from(size.height) / 2.0 / camera.zoom,
-        ];
-        self.camera.set(camera);
-    }
-
     fn clear_caches(&self) {
         self.below.clear();
         self.above.clear();
@@ -486,33 +393,4 @@ impl Sketch {
 
 fn write_clipboard(json: Option<String>) -> Task<Message> {
     json.map_or_else(Task::none, |json| iced::clipboard::write(json).discard())
-}
-
-/// Top-left of everything drawn, minus [`PADDING`], so a scene opens at 100%
-/// zoom aligned like Excalidraw's SVG export.
-fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
-    let mut min = [f64::INFINITY, f64::INFINITY];
-    for drawing in drawings {
-        for item in &drawing.items {
-            let points: Vec<[f64; 2]> = match item {
-                Item::Stroke { path, .. } | Item::Fill { path, .. } => path
-                    .iter()
-                    .map(|segment| match *segment {
-                        Segment::MoveTo(p) | Segment::LineTo(p) | Segment::CubicTo(_, _, p) => p,
-                    })
-                    .collect(),
-                Item::Text(_) => vec![[0.0, 0.0]],
-                Item::Image { size, .. } | Item::Frame { size, .. } => vec![[0.0, 0.0], *size],
-            };
-            for p in points {
-                let [x, y] = drawing.transform.apply(p);
-                min = [min[0].min(x), min[1].min(y)];
-            }
-        }
-    }
-    if min[0].is_finite() {
-        [min[0] - PADDING, min[1] - PADDING]
-    } else {
-        [0.0, 0.0]
-    }
 }

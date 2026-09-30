@@ -27,6 +27,8 @@ pub(super) enum Glyph {
         round: bool,
     },
     Align(TextAlign),
+    /// The main menu button: three lines.
+    Menu,
 }
 
 /// An icon drawn in `color`.
@@ -216,6 +218,10 @@ impl canvas::Program<Message> for Icon {
             } else {
                 polyline(&[(4.0, 16.0), (4.0, 4.0), (16.0, 4.0)], false)
             }],
+            Glyph::Menu => [5.0, 10.0, 15.0]
+                .into_iter()
+                .map(|y| polyline(&[(4.0, y), (16.0, y)], false))
+                .collect(),
             Glyph::Align(align) => [(5.0, 12.0), (10.0, 8.0), (15.0, 12.0)]
                 .into_iter()
                 .map(|(y, length): (f32, f32)| {

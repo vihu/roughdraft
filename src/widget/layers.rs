@@ -1,14 +1,143 @@
-//! The scene's elements on a canvas frame: culled to the view, faded while
-//! marked for erasing, and frame children clipped to their frame.
+//! The scene's elements as drawings: re-rendered when they change, drawn on
+//! a canvas frame culled to the view, faded while marked for erasing, and
+//! frame children clipped to their frame.
 use iced::widget::canvas::Frame;
 
-use super::picture::Picture;
+use super::picture::{Picture, decode_image};
 use super::{Rendered, Sketch, paint};
-use crate::geometry::{Affine, Bounds};
-use crate::render::{self, Drawing, Item};
+use crate::edit;
+use crate::geometry::{self, Affine, Bounds};
+use crate::render::{self, Drawing, Item, Segment};
+
+/// Gap between the content and the canvas edge on open, like Excalidraw's
+/// SVG export padding.
+const PADDING: f64 = 10.0;
+
+/// Scene units added around an element's box before culling it: covers the
+/// rough wobble, stroke width and arrowheads, which reach past the box.
+const CULL_MARGIN: f64 = 50.0;
 
 // Private API
 impl Sketch {
+    /// Re-renders elements whose revision changed and invalidates the
+    /// static layers when anything outside the current gesture changed.
+    pub(super) fn refresh(&mut self) {
+        let scene = self.editor.scene();
+        let background = scene.background_color();
+        let active: Vec<String> = self.editor.active().into_iter().map(String::from).collect();
+        let mut previous = std::mem::take(&mut self.drawings);
+        let mut order = Vec::new();
+        let mut static_changed = active != self.active;
+
+        for element in render::draw_order(scene) {
+            let id = &element.base.id;
+            let revision = element.revision();
+            let rendered = match previous.remove(id) {
+                Some(cached) if cached.revision == revision => cached,
+                _ => {
+                    // A frame resized alone re-clips children that sit on
+                    // the static layers.
+                    let clips_static = element.frame_title().is_some()
+                        && scene.elements.iter().any(|e| {
+                            !e.base.is_deleted
+                                && e.frame_id() == Some(id.as_str())
+                                && !active.contains(&e.base.id)
+                        });
+                    static_changed |= !active.contains(id) || clips_static;
+                    let [x1, y1, x2, y2] = geometry::element_bounds(element);
+                    Rendered {
+                        revision,
+                        drawing: render::render_element(element, background),
+                        label: render::frame_label(element),
+                        frame: element.frame_id().map(String::from),
+                        extent: [
+                            x1 - CULL_MARGIN,
+                            y1 - CULL_MARGIN,
+                            x2 + CULL_MARGIN,
+                            y2 + CULL_MARGIN,
+                        ],
+                    }
+                }
+            };
+            if rendered.drawing.is_some() {
+                order.push(id.clone());
+            }
+            self.drawings.insert(id.clone(), rendered);
+        }
+        for element in scene.elements.iter().filter(|e| !e.base.is_deleted) {
+            let Some(id) = element.file_id() else {
+                continue;
+            };
+            let whole = Picture::of(id, None, [false, false]);
+            if !self.images.contains_key(&whole) && !self.undecodable.contains(id) {
+                let handle = scene
+                    .file_data_url(id)
+                    .and_then(crate::base64::decode_data_url)
+                    .and_then(|(_, bytes)| decode_image(&bytes));
+                match handle {
+                    Some(handle) => {
+                        self.images.insert(whole.clone(), handle);
+                        static_changed = true;
+                    }
+                    // A file the scene does not hold yet may come later
+                    // (`set_image`, a paste that brings it).
+                    None if scene.file_data_url(id).is_some() => {
+                        self.undecodable.insert(id.to_owned());
+                    }
+                    None => {}
+                }
+            }
+            // A cut or mirrored view comes from the whole picture's pixels.
+            let crop = element
+                .image_crop()
+                .map(|(rect, natural)| render::Crop { rect, natural });
+            let picture = Picture::of(id, crop.as_ref(), element.image_flip());
+            if picture != whole
+                && !self.images.contains_key(&picture)
+                && let Some(handle) = self
+                    .images
+                    .get(&whole)
+                    .and_then(|w| picture.derive(w, crop.as_ref()))
+            {
+                self.images.insert(picture, handle);
+                static_changed = true;
+            }
+        }
+        static_changed |= !previous.is_empty() || order != self.order;
+        self.order = order;
+        self.active = active;
+        if static_changed {
+            self.clear_caches();
+        }
+    }
+
+    pub(super) fn drawings(&self) -> impl Iterator<Item = &Drawing> {
+        self.order
+            .iter()
+            .filter_map(|id| self.drawings[id].drawing.as_ref())
+    }
+
+    /// Centres the live elements in a view of `size` at the camera's zoom.
+    pub(super) fn centre_content(&self, size: iced::Size) {
+        let live: Vec<&crate::scene::Element> = self
+            .editor
+            .scene()
+            .elements
+            .iter()
+            .filter(|e| !e.base.is_deleted)
+            .collect();
+        if live.is_empty() {
+            return;
+        }
+        let [x1, y1, x2, y2] = edit::common_bounds(live.into_iter());
+        let mut camera = self.camera.get();
+        camera.origin = [
+            (x1 + x2) / 2.0 - f64::from(size.width) / 2.0 / camera.zoom,
+            (y1 + y2) / 2.0 - f64::from(size.height) / 2.0 / camera.zoom,
+        ];
+        self.camera.set(camera);
+    }
+
     pub(super) fn draw_ids(&self, frame: &mut Frame, ids: &[String], view: Affine) {
         // Only what is in view, like Excalidraw's `getVisibleCanvasElements`.
         let camera = self.camera.get();
@@ -92,5 +221,34 @@ impl Sketch {
                 _ => paint::draw_item(frame, item, transform, &|c| self.paint(c.fade(fade))),
             }
         }
+    }
+}
+
+/// Top-left of everything drawn, minus [`PADDING`], so a scene opens at 100%
+/// zoom aligned like Excalidraw's SVG export.
+pub(super) fn content_origin<'a>(drawings: impl Iterator<Item = &'a Drawing>) -> [f64; 2] {
+    let mut min = [f64::INFINITY, f64::INFINITY];
+    for drawing in drawings {
+        for item in &drawing.items {
+            let points: Vec<[f64; 2]> = match item {
+                Item::Stroke { path, .. } | Item::Fill { path, .. } => path
+                    .iter()
+                    .map(|segment| match *segment {
+                        Segment::MoveTo(p) | Segment::LineTo(p) | Segment::CubicTo(_, _, p) => p,
+                    })
+                    .collect(),
+                Item::Text(_) => vec![[0.0, 0.0]],
+                Item::Image { size, .. } | Item::Frame { size, .. } => vec![[0.0, 0.0], *size],
+            };
+            for p in points {
+                let [x, y] = drawing.transform.apply(p);
+                min = [min[0].min(x), min[1].min(y)];
+            }
+        }
+    }
+    if min[0].is_finite() {
+        [min[0] - PADDING, min[1] - PADDING]
+    } else {
+        [0.0, 0.0]
     }
 }

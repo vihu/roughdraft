@@ -31,6 +31,10 @@ impl ColorField {
     }
 }
 
+/// Width of the style panel's widest controls (the opacity slider, the
+/// arrowhead lists), which sets the panel's width for every selection.
+const CONTENT_WIDTH: f32 = 180.0;
+
 /// Stroke quick picks.
 const STROKES: [&str; 5] = ["#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"];
 
@@ -178,7 +182,7 @@ impl Sketch {
     }
 
     /// The iced theme matching the canvas.
-    fn theme(&self) -> Theme {
+    pub(super) fn theme(&self) -> Theme {
         match self.appearance {
             Appearance::Light => Theme::Light,
             Appearance::Dark => Theme::Dark,
@@ -187,7 +191,10 @@ impl Sketch {
 
     /// Draws `content` in the light or dark iced theme that matches the
     /// canvas, whatever the host's theme is, like Excalidraw's UI.
-    fn themed<'a>(&self, content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+    pub(super) fn themed<'a>(
+        &self,
+        content: impl Into<Element<'a, Message>>,
+    ) -> Element<'a, Message> {
         themer(Some(self.theme()), content)
             .text_color(|theme| theme.palette().background.base.text)
             .into()
@@ -294,7 +301,10 @@ impl Sketch {
             sections.push(section("Edges", self.icon_choices(edges)));
         }
         if arrows {
-            sections.push(section("Arrowheads", arrowheads(&style)));
+            // One list per end, stacked, so the panel keeps its width.
+            let (start, end) = arrowheads(&style);
+            sections.push(section("Start arrowhead", start));
+            sections.push(section("End arrowhead", end));
         }
         if texts {
             let size = |label, value: f64| {
@@ -341,7 +351,7 @@ impl Sketch {
             Message(Input::Style(StyleChange::Opacity(value)))
         })
         .step(10.0)
-        .width(Length::Fixed(180.0));
+        .width(Length::Fixed(CONTENT_WIDTH));
         sections.push(section("Opacity", opacity.into()));
 
         let panel = container(Column::with_children(sections).spacing(10))
@@ -475,25 +485,22 @@ fn swatches<'a>(
     .into()
 }
 
-fn arrowheads(style: &Style) -> Element<'static, Message> {
-    let start = pick_list(
-        Some(Head(style.start_arrowhead.clone())),
-        heads(),
-        Head::to_string,
+/// The start and end arrowhead lists.
+fn arrowheads(style: &Style) -> (Element<'static, Message>, Element<'static, Message>) {
+    let list = |current: &Option<Arrowhead>, change: fn(Option<Arrowhead>) -> StyleChange| {
+        pick_list(Some(Head(current.clone())), heads(), Head::to_string)
+            .on_select(move |head: Head| Message(Input::Style(change(head.0))))
+            .text_size(12)
+            .width(Length::Fixed(CONTENT_WIDTH))
+            .into()
+    };
+    (
+        list(&style.start_arrowhead, StyleChange::StartArrowhead),
+        list(&style.end_arrowhead, StyleChange::EndArrowhead),
     )
-    .on_select(|head: Head| Message(Input::Style(StyleChange::StartArrowhead(head.0))))
-    .text_size(12);
-    let end = pick_list(
-        Some(Head(style.end_arrowhead.clone())),
-        heads(),
-        Head::to_string,
-    )
-    .on_select(|head: Head| Message(Input::Style(StyleChange::EndArrowhead(head.0))))
-    .text_size(12);
-    row![start, end].spacing(4).into()
 }
 
-fn panel_style(theme: &Theme) -> container::Style {
+pub(super) fn panel_style(theme: &Theme) -> container::Style {
     let palette = theme.palette();
     container::Style {
         background: Some(Background::Color(palette.background.base.color)),

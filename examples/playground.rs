@@ -8,9 +8,10 @@
 //!
 //! Keys follow Excalidraw:
 //!
-//! - Files: Ctrl+O open, Ctrl+S save (asks where for new files and Keeprs
-//!   memos), Ctrl+Shift+S save as, 9 insert an image file. The title shows
-//!   `*` while there are unsaved changes.
+//! - Files: the menu in the top-left corner (open, save, save as, export
+//!   SVG, insert image, dark/light), or Ctrl+O open, Ctrl+S save (asks where
+//!   for new files and Keeprs memos), Ctrl+Shift+S save as, 9 insert an
+//!   image file. The title shows `*` while there are unsaved changes.
 //! - Tools: V or 1 select, H hand, R or 2 rectangle, D or 3 diamond, O or 4
 //!   ellipse, A or 5 arrow, L or 6 line, T or 8 text, E or 0 eraser (drag
 //!   across elements; Alt un-marks), F frame (takes in what is wholly
@@ -46,7 +47,8 @@ use iced::keyboard::{self, key};
 use iced::widget::{container, stack, text};
 use iced::{Element, Subscription, Task};
 use roughdraft::scene::Scene;
-use roughdraft::widget::{self, Appearance, Sketch};
+use roughdraft::svg::{self, SvgOptions};
+use roughdraft::widget::{self, Appearance, Request, Sketch};
 use serde_json::Value;
 
 const USAGE: &str = "usage: playground [file.excalidraw | keeprs-memo.json] [--snapshot out.png] [--dark] [--origin x,y]";
@@ -134,6 +136,9 @@ enum Message {
     Saved(Result<Option<PathBuf>, String>, u32),
     PickImage,
     ImagePicked(Option<Vec<u8>>),
+    ExportSvg,
+    /// Where the SVG went (`None` when the dialog was cancelled).
+    Exported(Result<Option<PathBuf>, String>),
 }
 
 impl Playground {
@@ -145,6 +150,13 @@ impl Playground {
         };
         let mut sketch = Sketch::new(scene);
         sketch.set_appearance(appearance);
+        sketch.set_menu(vec![
+            Request::Open,
+            Request::Save,
+            Request::SaveAs,
+            Request::ExportSvg,
+            Request::InsertImage,
+        ]);
         Self {
             path,
             saved: sketch.scene().version(),
@@ -172,7 +184,19 @@ impl Playground {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Sketch(message) => return self.sketch.update(message).map(Message::Sketch),
+            Message::Sketch(message) => {
+                // A main menu item: the playground carries it out.
+                let request = message.request().map(|request| match request {
+                    Request::Open => Message::Open,
+                    Request::Save => Message::Save { choose: false },
+                    Request::SaveAs => Message::Save { choose: true },
+                    Request::ExportSvg => Message::ExportSvg,
+                    Request::InsertImage => Message::PickImage,
+                });
+                let task = self.sketch.update(message).map(Message::Sketch);
+                let follow = request.map_or_else(Task::none, |request| self.update(request));
+                return Task::batch([task, follow]);
+            }
             Message::ToggleAppearance => {
                 self.sketch.set_appearance(match self.sketch.appearance() {
                     Appearance::Light => Appearance::Dark,
@@ -204,6 +228,17 @@ impl Playground {
                 }
             }
             Message::ImagePicked(None) => {}
+            Message::ExportSvg => {
+                let image = svg::export(&self.sketch.scene().saved(), &SvgOptions::default());
+                let name = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map_or("untitled".into(), |s| s.to_string_lossy().into_owned());
+                return Task::perform(export_svg(format!("{name}.svg"), image), Message::Exported);
+            }
+            Message::Exported(Err(error)) => self.error = Some(error),
+            Message::Exported(Ok(_)) => {}
         }
         Task::none()
     }
@@ -302,6 +337,18 @@ async fn save_file(path: Option<PathBuf>, json: String) -> Result<Option<PathBuf
         }
     };
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(Some(path))
+}
+
+async fn export_svg(name: String, image: String) -> Result<Option<PathBuf>, String> {
+    let dialog = rfd::AsyncFileDialog::new()
+        .add_filter("SVG", &["svg"])
+        .set_file_name(name);
+    let Some(file) = dialog.save_file().await else {
+        return Ok(None);
+    };
+    let path = file.path().to_owned();
+    std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(Some(path))
 }
 
