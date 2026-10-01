@@ -3,6 +3,8 @@
 //! ```text
 //! roughdraft [file.excalidraw] [--dark]
 //! roughdraft build <skeleton.json> -o <out.excalidraw>
+//! roughdraft check <file.excalidraw>
+//! roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]
 //! cargo run --release -p roughdraft-app -- [file.excalidraw] [--dark]
 //! ```
 //!

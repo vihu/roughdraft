@@ -13,6 +13,7 @@ mod overlay;
 mod paint;
 mod picker;
 mod picture;
+mod png;
 mod program;
 mod text;
 mod ui;
@@ -34,6 +35,7 @@ use crate::render::Drawing;
 use crate::scene::{Grid, Scene};
 
 pub use self::menu::Request;
+pub use self::png::{Png, PngError, render_png};
 pub use self::text::font_measure;
 pub use crate::fonts::EXCALIFONT;
 

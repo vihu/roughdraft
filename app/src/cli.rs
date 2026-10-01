@@ -1,6 +1,6 @@
-//! Commands for agents and scripts (PLAN-002): `build` and `check`. They
-//! never prompt, print a JSON result on stdout, and exit non-zero on
-//! failure.
+//! Commands for agents and scripts (PLAN-002): `build`, `check` and
+//! `render`. They never prompt, print a JSON result on stdout, and exit
+//! non-zero on failure.
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -15,12 +15,23 @@ Usage:
                                              from a skeleton (\"-\" reads stdin)
   roughdraft check <file.excalidraw>         list what to fix: labels that do
                                              not fit, broken bindings, overlaps
+  roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]
+                                             draw it as a PNG, as Excalidraw
+                                             exports it (no window needed)
   roughdraft help                            show this
 
-Each command prints JSON on stdout. build: {\"ok\": true, ...} or
+Each command prints JSON on stdout. build: {\"ok\": true, \"shapes\": {id: [x, y,
+width, height]}, ...} or
 {\"ok\": false, \"errors\": [{\"path\", \"message\"}]}. check: {\"ok\", \"problems\":
-[{\"kind\", \"severity\", \"ids\", \"message\"}]}, ok when no errors. Exit codes:
-0 done, 1 check found errors, 2 bad input.";
+[{\"kind\", \"severity\", \"ids\", \"message\"}]}, ok when no errors. render:
+{\"ok\": true, \"output\", \"width\", \"height\", \"scale\", \"renderer\"}. Exit codes:
+0 done, 1 check found errors or render failed, 2 bad input.";
+
+/// Pixels per scene unit for `render`, as Excalidraw's 2x PNG export.
+const DEFAULT_SCALE: f32 = 2.0;
+
+/// The scales `render` takes.
+const SCALE: std::ops::RangeInclusive<f32> = 0.1..=8.0;
 
 /// Runs the command in `args`; `None` when there is none, to open the
 /// editor.
@@ -29,6 +40,7 @@ pub fn run(args: &[String]) -> Option<i32> {
     Some(match command.as_str() {
         "build" => build(rest),
         "check" => check(rest),
+        "render" => render(rest),
         "help" | "--help" | "-h" => {
             println!("{HELP}");
             0
@@ -64,6 +76,7 @@ fn build(args: &[String]) -> i32 {
                 "ok": true,
                 "output": output,
                 "elements": built.scene.elements.len(),
+                "shapes": shapes(&built.scene),
                 "warnings": built.warnings.iter().map(|w| json!({"path": w.path, "message": w.message})).collect::<Vec<_>>(),
             }));
             0
@@ -122,6 +135,84 @@ fn check(args: &[String]) -> i32 {
     i32::from(errors > 0)
 }
 
+/// `roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]`.
+fn render(args: &[String]) -> i32 {
+    let mut appearance = roughdraft::widget::Appearance::Light;
+    let mut scale = DEFAULT_SCALE;
+    let mut paths = Vec::new();
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!("{HELP}");
+                return 0;
+            }
+            "--dark" => appearance = roughdraft::widget::Appearance::Dark,
+            "--scale" => match args.next().and_then(|s| s.parse().ok()) {
+                Some(value) if SCALE.contains(&value) => scale = value,
+                _ => return fail(&format!("--scale takes a number in {SCALE:?}")),
+            },
+            _ => paths.push(arg.clone()),
+        }
+    }
+    let (input, output) = match input_and_output(&paths) {
+        Ok(paths) => paths,
+        Err(message) => return fail(&message),
+    };
+    let text = match read(&input) {
+        Ok(text) => text,
+        Err(message) => return fail(&message),
+    };
+    let scene: roughdraft::scene::Scene = match serde_json::from_str(&text) {
+        Ok(scene) => scene,
+        Err(e) => {
+            return fail(&format!(
+                "{}: not an Excalidraw scene: {e}",
+                input.display()
+            ));
+        }
+    };
+    let png = match roughdraft::widget::render_png(scene, appearance, scale) {
+        Ok(png) => png,
+        Err(e) => {
+            print(json!({"ok": false, "errors": [{"path": "", "message": e.to_string()}]}));
+            return 1;
+        }
+    };
+    if let Err(e) = std::fs::write(&output, &png.bytes) {
+        return fail(&format!("{}: {e}", output.display()));
+    }
+    print(json!({
+        "ok": true,
+        "output": output,
+        "width": png.width,
+        "height": png.height,
+        "scale": png.scale,
+        "renderer": png.renderer,
+    }));
+    0
+}
+
+/// Where each shape, free text and frame landed, as `[x, y, width,
+/// height]` by id: what an agent needs to route arrows with points.
+fn shapes(scene: &roughdraft::scene::Scene) -> serde_json::Map<String, Value> {
+    use roughdraft::scene::Kind;
+    scene
+        .elements
+        .iter()
+        .filter(|e| match &e.kind {
+            Kind::Arrow(_) | Kind::Line(_) => false,
+            Kind::Text(text) => text.container_id.is_none(),
+            _ => true,
+        })
+        .map(|e| {
+            let b = &e.base;
+            let place = [b.x, b.y, b.width, b.height].map(|v| v.round() as i64);
+            (b.id.clone(), json!(place))
+        })
+        .collect()
+}
+
 /// The input path (or `-` for stdin) and the `-o` path.
 fn input_and_output(args: &[String]) -> Result<(PathBuf, PathBuf), String> {
     let mut input = None;
@@ -139,8 +230,8 @@ fn input_and_output(args: &[String]) -> Result<(PathBuf, PathBuf), String> {
             other => return Err(format!("unexpected argument {other}")),
         }
     }
-    let input = input.ok_or("missing the skeleton file (or - for stdin)")?;
-    let output = output.ok_or("missing -o <out.excalidraw>")?;
+    let input = input.ok_or("missing the input file (or - for stdin)")?;
+    let output = output.ok_or("missing -o <output file>")?;
     Ok((PathBuf::from(input), PathBuf::from(output)))
 }
 
@@ -161,9 +252,30 @@ fn fail(message: &str) -> i32 {
     2
 }
 
+/// Prints `value` as indented JSON, with each array of numbers or strings
+/// on one line (shape boxes, ids).
 fn print(value: Value) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&value).expect("JSON values serialize")
-    );
+    let pretty = serde_json::to_string_pretty(&value).expect("JSON values serialize");
+    let lines: Vec<&str> = pretty.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        if line.ends_with('[') {
+            let items: Vec<&str> = lines[i + 1..]
+                .iter()
+                .map(|l| l.trim())
+                .take_while(|l| !l.starts_with(']'))
+                .collect();
+            let flat = items.iter().all(|l| !l.starts_with(['{', '[']));
+            if let Some(close) = lines.get(i + 1 + items.len()).filter(|_| flat) {
+                out.push(format!("{line}{}{}", items.join(" "), close.trim()));
+                i += items.len() + 2;
+                continue;
+            }
+        }
+        out.push(line.to_owned());
+        i += 1;
+    }
+    println!("{}", out.join("\n"));
 }
