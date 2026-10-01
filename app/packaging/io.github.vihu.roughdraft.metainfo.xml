@@ -35,6 +35,17 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-10-01">
+      <description>
+        <ul>
+          <li>Commands for scripts and coding agents: build a complete diagram from a short skeleton, check a diagram for problems, and render it to PNG without a window</li>
+          <li>An agent skill that teaches Claude Code, pi and other coding agents to draw diagrams with these commands</li>
+          <li>Arrow labels leave a gap in their arrow, as in Excalidraw</li>
+          <li>The points of a selected line or arrow highlight under the pointer</li>
+          <li>Text in the Normal font (Nunito) is measured at its own weight</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-09-30">
       <description>
         <ul>
