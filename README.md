@@ -133,6 +133,32 @@ cargo run --release -p roughdraft-app -- [scene.excalidraw] [--dark]
 of `app/src/main.rs` for keys. `cargo run --release --example snapshot`
 renders a scene headlessly to a PNG.
 
+## Diagrams from coding agents
+
+Three commands for scripts and agents. Each prints JSON on stdout and
+never opens a window:
+
+```text
+roughdraft build skeleton.json -o diagram.excalidraw   # a complete file from a short skeleton
+roughdraft check diagram.excalidraw                    # what to fix, in words
+roughdraft render diagram.excalidraw -o diagram.png    # a PNG, as Excalidraw exports it
+```
+
+`skills/drawing-excalidraw-diagrams/` is an [Agent Skill] that teaches a
+coding agent (Claude Code, pi, and others that read Agent Skills) to draw
+with them: write a skeleton, build, check, render, look, fix. Link the
+folder where your agent looks for skills:
+
+```text
+ln -s "$PWD/skills/drawing-excalidraw-diagrams" ~/.claude/skills/   # Claude Code
+ln -s "$PWD/skills/drawing-excalidraw-diagrams" ~/.agents/skills/   # pi, and others
+```
+
+The agent needs `roughdraft` on its `PATH`: the AppImage renamed to
+`roughdraft`, `roughdraft.app/Contents/MacOS/roughdraft` on macOS, or
+`cargo install --locked --git https://github.com/vihu/roughdraft roughdraft-app`.
+The Flatpak only sees files inside its sandbox, so it does not suit agents.
+
 ## How it is checked
 
 CI runs all of this on Linux and macOS for every push to `main` and every pull request.
@@ -158,5 +184,6 @@ own licences, next to each font under `assets/fonts/`: Excalifont, Virgil,
 Nunito and Lilita One are under the SIL Open Font License 1.1, Comic
 Shanns under MIT.
 
+[Agent Skill]: https://agentskills.io
 [iced]: https://github.com/iced-rs/iced
 [Excalidraw]: https://excalidraw.com
