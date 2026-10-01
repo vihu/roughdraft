@@ -20,7 +20,11 @@ Usage:
                                              draw it as Excalidraw exports it,
                                              no window needed: a PNG, an SVG
                                              with its fonts, or one
-                                             self-contained web page
+                                             self-contained web page with a
+                                             light/dark switch; --dark draws
+                                             the PNG or SVG dark, and starts
+                                             the page dark instead of following
+                                             the system
   roughdraft --version                       print the version (also -V)
   roughdraft help                            show this
 
@@ -188,11 +192,6 @@ fn render(args: &[String]) -> i32 {
     if title.is_some() && format != "html" {
         return fail("--title applies to .html only");
     }
-    if appearance == Appearance::Dark && format == "html" {
-        return fail(
-            "--dark does not apply to .html: the page follows the viewer's light or dark mode",
-        );
-    }
     let text = match read(&input) {
         Ok(text) => text,
         Err(message) => return fail(&message),
@@ -236,7 +235,11 @@ fn render(args: &[String]) -> i32 {
                 .filter(|_| input != Path::new("-"))
                 .map_or("diagram".into(), |s| s.to_string_lossy().into_owned());
             let title = title.unwrap_or_else(|| stem.clone());
-            let page = roughdraft::html::page(&scene, &title, &format!("{stem}.excalidraw"));
+            let start = match appearance {
+                Appearance::Light => roughdraft::html::StartTheme::System,
+                Appearance::Dark => roughdraft::html::StartTheme::Dark,
+            };
+            let page = roughdraft::html::page(&scene, &title, &format!("{stem}.excalidraw"), start);
             (page.into_bytes(), json!({}))
         }
     };

@@ -167,8 +167,10 @@ diagram goes:
 - `.svg`: Markdown, READMEs and docs sites. Sharp at any zoom, fonts inside.
 - `.png`: chat, email and slides.
 - `.html`: a web page for any static host. One self-contained file with the
-  drawing, light and dark mode, and a link to download the `.excalidraw`;
-  `--title` sets its heading.
+  drawing, a link to download the `.excalidraw`, and a light/dark toggle
+  that remembers the reader's choice. It follows the reader's system theme
+  until they switch; `--dark` starts it dark instead. `--title` sets its
+  heading.
 - The `.excalidraw` itself, for anyone who will edit it.
 
 Never publish on your own. When asked to publish, hand the file to the
