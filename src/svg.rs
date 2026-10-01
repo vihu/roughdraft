@@ -407,7 +407,8 @@ fn font_family(id: u32) -> &'static str {
     }
 }
 
-fn escape(text: &str) -> String {
+/// Escapes text for XML and HTML, dropping control characters.
+pub(crate) fn escape(text: &str) -> String {
     // Control characters other than tab and newlines are not allowed in
     // XML at all.
     text.chars()

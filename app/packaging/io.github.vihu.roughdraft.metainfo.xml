@@ -35,6 +35,15 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-10-01">
+      <description>
+        <ul>
+          <li>Render a diagram as an SVG or as one self-contained web page, besides PNG: the format follows the output file's extension</li>
+          <li>Exported SVG files embed their fonts, so browsers show the hand-drawn text instead of a serif stand-in</li>
+          <li>roughdraft --version prints the version</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-10-01">
       <description>
         <ul>

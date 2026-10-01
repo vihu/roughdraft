@@ -12,7 +12,7 @@ in excalidraw.com unchanged, and the other way round.
 - An iced-free core (`scene`, `render`, `edit`, `svg`), so scenes can be
   edited, tested and exported to SVG without a window.
 
-Status: 0.3.0, not on crates.io. Targets Linux (Wayland) and macOS. It is both
+Status: 0.4.0, not on crates.io. Targets Linux (Wayland) and macOS. It is both
 a library for iced apps and a standalone editor (the `roughdraft` app).
 
 ## Embedding
@@ -142,7 +142,13 @@ never opens a window:
 roughdraft build skeleton.json -o diagram.excalidraw   # a complete file from a short skeleton
 roughdraft check diagram.excalidraw                    # what to fix, in words
 roughdraft render diagram.excalidraw -o diagram.png    # a PNG, as Excalidraw exports it
+roughdraft render diagram.excalidraw -o diagram.svg    # an SVG with its fonts
+roughdraft render diagram.excalidraw -o diagram.html   # one self-contained web page
 ```
+
+The web page holds the drawing (following the viewer's light or dark mode)
+and a link to download the `.excalidraw`, with nothing to fetch, so any
+static host can serve it.
 
 `skills/drawing-excalidraw-diagrams/` is an [Agent Skill] that teaches a
 coding agent (Claude Code, pi, and others that read Agent Skills) to draw

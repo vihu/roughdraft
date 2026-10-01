@@ -1,6 +1,6 @@
 ---
 name: drawing-excalidraw-diagrams
-description: Draws hand-drawn Excalidraw diagrams (architecture, request flows, pipelines, component maps) as .excalidraw files with the roughdraft CLI, which builds a complete file from a short JSON skeleton, checks it for layout faults and renders a PNG to look at. Use when asked for an Excalidraw diagram, a .excalidraw file, or a hand-drawn or whiteboard-style diagram, or to check or fix an existing .excalidraw file.
+description: Draws hand-drawn Excalidraw diagrams (architecture, request flows, pipelines, component maps) as .excalidraw files with the roughdraft CLI, which builds a complete file from a short JSON skeleton, checks it for layout faults, renders a PNG to look at, and exports SVG or a self-contained web page to share. Use when asked for an Excalidraw diagram, a .excalidraw file, or a hand-drawn or whiteboard-style diagram, or to check or fix an existing .excalidraw file.
 license: MIT
 compatibility: Requires the roughdraft CLI with the build, check and render commands on PATH. Works offline; no browser.
 ---
@@ -37,7 +37,8 @@ Run `roughdraft help` first. If it is not found, or it has no `check` and
    well.
 
 All three commands print JSON on stdout and never prompt. `render` takes
-`--dark` (Excalidraw's dark mode) and `--scale N` (default 2).
+`--dark` (Excalidraw's dark mode, PNG and SVG) and `--scale N` (PNG,
+default 2); see Sharing for its formats.
 
 ## The skeleton
 
@@ -157,6 +158,21 @@ for light mode; `render --dark` shows how Excalidraw's dark mode shows them.
 
 Each problem names its elements in `ids`. A label's id is its shape's id
 plus `-label`.
+
+## Sharing
+
+`render` picks the format from the output's extension. Choose by where the
+diagram goes:
+
+- `.svg`: Markdown, READMEs and docs sites. Sharp at any zoom, fonts inside.
+- `.png`: chat, email and slides.
+- `.html`: a web page for any static host. One self-contained file with the
+  drawing, light and dark mode, and a link to download the `.excalidraw`;
+  `--title` sets its heading.
+- The `.excalidraw` itself, for anyone who will edit it.
+
+Never publish on your own. When asked to publish, hand the file to the
+tool the user has for it (a publishing skill, `gh`, a deploy script).
 
 ## An existing .excalidraw file
 

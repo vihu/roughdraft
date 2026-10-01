@@ -4,7 +4,8 @@
 //! roughdraft [file.excalidraw] [--dark]
 //! roughdraft build <skeleton.json> -o <out.excalidraw>
 //! roughdraft check <file.excalidraw>
-//! roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]
+//! roughdraft render <file.excalidraw> -o <out.png|out.svg|out.html> [--dark] [--scale 2] [--title T]
+//! roughdraft --version
 //! cargo run --release -p roughdraft-app -- [file.excalidraw] [--dark]
 //! ```
 //!

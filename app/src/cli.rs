@@ -15,16 +15,21 @@ Usage:
                                              from a skeleton (\"-\" reads stdin)
   roughdraft check <file.excalidraw>         list what to fix: labels that do
                                              not fit, broken bindings, overlaps
-  roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]
-                                             draw it as a PNG, as Excalidraw
-                                             exports it (no window needed)
+  roughdraft render <file.excalidraw> -o <out.png|out.svg|out.html>
+                    [--dark] [--scale 2] [--title T]
+                                             draw it as Excalidraw exports it,
+                                             no window needed: a PNG, an SVG
+                                             with its fonts, or one
+                                             self-contained web page
+  roughdraft --version                       print the version (also -V)
   roughdraft help                            show this
 
 Each command prints JSON on stdout. build: {\"ok\": true, \"shapes\": {id: [x, y,
 width, height]}, ...} or
 {\"ok\": false, \"errors\": [{\"path\", \"message\"}]}. check: {\"ok\", \"problems\":
 [{\"kind\", \"severity\", \"ids\", \"message\"}]}, ok when no errors. render:
-{\"ok\": true, \"output\", \"width\", \"height\", \"scale\", \"renderer\"}. Exit codes:
+{\"ok\": true, \"output\", \"format\", \"bytes\"}, plus \"width\", \"height\", \"scale\" and
+\"renderer\" for a PNG. Exit codes:
 0 done, 1 check found errors or render failed, 2 bad input.";
 
 /// Pixels per scene unit for `render`, as Excalidraw's 2x PNG export.
@@ -43,6 +48,10 @@ pub fn run(args: &[String]) -> Option<i32> {
         "render" => render(rest),
         "help" | "--help" | "-h" => {
             println!("{HELP}");
+            0
+        }
+        "--version" | "-V" => {
+            println!("roughdraft {}", env!("CARGO_PKG_VERSION"));
             0
         }
         _ => return None,
@@ -135,10 +144,13 @@ fn check(args: &[String]) -> i32 {
     i32::from(errors > 0)
 }
 
-/// `roughdraft render <file.excalidraw> -o <out.png> [--dark] [--scale 2]`.
+/// `roughdraft render <file.excalidraw> -o <out.png|.svg|.html> [--dark]
+/// [--scale 2] [--title T]`: the format follows the output's extension.
 fn render(args: &[String]) -> i32 {
-    let mut appearance = roughdraft::widget::Appearance::Light;
-    let mut scale = DEFAULT_SCALE;
+    use roughdraft::widget::Appearance;
+    let mut appearance = Appearance::Light;
+    let mut scale = None;
+    let mut title = None;
     let mut paths = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -147,10 +159,14 @@ fn render(args: &[String]) -> i32 {
                 println!("{HELP}");
                 return 0;
             }
-            "--dark" => appearance = roughdraft::widget::Appearance::Dark,
+            "--dark" => appearance = Appearance::Dark,
             "--scale" => match args.next().and_then(|s| s.parse().ok()) {
-                Some(value) if SCALE.contains(&value) => scale = value,
+                Some(value) if SCALE.contains(&value) => scale = Some(value),
                 _ => return fail(&format!("--scale takes a number in {SCALE:?}")),
+            },
+            "--title" => match args.next() {
+                Some(text) => title = Some(text.clone()),
+                None => return fail("--title needs the page's title"),
             },
             _ => paths.push(arg.clone()),
         }
@@ -159,6 +175,24 @@ fn render(args: &[String]) -> i32 {
         Ok(paths) => paths,
         Err(message) => return fail(&message),
     };
+    let format = output
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default();
+    if !matches!(format, "png" | "svg" | "html") {
+        return fail("the output must end in .png, .svg or .html");
+    }
+    if scale.is_some() && format != "png" {
+        return fail("--scale applies to .png only: SVG and HTML scale without loss");
+    }
+    if title.is_some() && format != "html" {
+        return fail("--title applies to .html only");
+    }
+    if appearance == Appearance::Dark && format == "html" {
+        return fail(
+            "--dark does not apply to .html: the page follows the viewer's light or dark mode",
+        );
+    }
     let text = match read(&input) {
         Ok(text) => text,
         Err(message) => return fail(&message),
@@ -172,24 +206,48 @@ fn render(args: &[String]) -> i32 {
             ));
         }
     };
-    let png = match roughdraft::widget::render_png(scene, appearance, scale) {
-        Ok(png) => png,
-        Err(e) => {
-            print(json!({"ok": false, "errors": [{"path": "", "message": e.to_string()}]}));
-            return 1;
+    let (bytes, details) = match format {
+        "png" => {
+            match roughdraft::widget::render_png(scene, appearance, scale.unwrap_or(DEFAULT_SCALE))
+            {
+                Ok(png) => (
+                    png.bytes,
+                    json!({"width": png.width, "height": png.height, "scale": png.scale, "renderer": png.renderer}),
+                ),
+                Err(e) => {
+                    print(json!({"ok": false, "errors": [{"path": "", "message": e.to_string()}]}));
+                    return 1;
+                }
+            }
+        }
+        "svg" => {
+            let options = roughdraft::svg::SvgOptions {
+                dark: appearance == Appearance::Dark,
+                ..Default::default()
+            };
+            (
+                roughdraft::svg::export(&scene.saved(), &options).into_bytes(),
+                json!({}),
+            )
+        }
+        _ => {
+            let stem = input
+                .file_stem()
+                .filter(|_| input != Path::new("-"))
+                .map_or("diagram".into(), |s| s.to_string_lossy().into_owned());
+            let title = title.unwrap_or_else(|| stem.clone());
+            let page = roughdraft::html::page(&scene, &title, &format!("{stem}.excalidraw"));
+            (page.into_bytes(), json!({}))
         }
     };
-    if let Err(e) = std::fs::write(&output, &png.bytes) {
+    if let Err(e) = std::fs::write(&output, &bytes) {
         return fail(&format!("{}: {e}", output.display()));
     }
-    print(json!({
-        "ok": true,
-        "output": output,
-        "width": png.width,
-        "height": png.height,
-        "scale": png.scale,
-        "renderer": png.renderer,
-    }));
+    let mut result = json!({"ok": true, "output": output, "format": format, "bytes": bytes.len()});
+    if let (Some(result), Value::Object(details)) = (result.as_object_mut(), details) {
+        result.extend(details);
+    }
+    print(result);
     0
 }
 

@@ -10,6 +10,7 @@ pub mod fonts;
 pub mod geometry;
 pub mod history;
 pub mod hit;
+pub mod html;
 mod random;
 pub mod render;
 pub mod scene;
