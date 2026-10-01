@@ -20,6 +20,11 @@ const PADDING: f64 = 10.0;
 /// rough wobble, stroke width and arrowheads, which reach past the box.
 const CULL_MARGIN: f64 = 50.0;
 
+/// Smallest width and height, in logical pixels, of a clip region worth
+/// drawing: at scale factors of 1 and above it covers a physical pixel, so
+/// iced's wgpu backend never skips it.
+const MIN_CLIP: f32 = 1.0;
+
 // Private API
 impl Sketch {
     /// Re-renders elements whose revision changed and invalidates the
@@ -227,6 +232,15 @@ impl Sketch {
             }
         }
         for (clip, run) in runs {
+            // iced's wgpu backend skips a mesh whose clip shows less than a
+            // pixel but not its indices, garbling every element drawn after
+            // it: a frame out of view must not draw its children at all.
+            let in_view = clip
+                .intersection(&full)
+                .is_some_and(|c| c.width >= MIN_CLIP && c.height >= MIN_CLIP);
+            if !in_view {
+                continue;
+            }
             frame.with_clip(clip, |frame| {
                 for (id, rendered, drawing) in run {
                     // `ELEMENT_READY_TO_ERASE_OPACITY`: 20%, children of a

@@ -370,27 +370,13 @@ fn the_style_panel_keeps_its_width_with_arrowhead_choices() {
         run(&mut sketch, |ui| {
             let _ = ui.tap_key(iced::keyboard::Key::Character(tool.into()));
         });
-        let stem = format!("roughdraft-panel-{}-{tool}", std::process::id());
-        let path = std::env::temp_dir().join(&stem);
         let mut ui = iced_test::Simulator::with_size(
             iced::Settings::default(),
             (800.0, 900.0),
             sketch.view(),
         );
         let snapshot = ui.snapshot(&iced::Theme::Dark).unwrap();
-        assert!(snapshot.matches_image(&path).unwrap());
-        let png = std::fs::read_dir(std::env::temp_dir())
-            .unwrap()
-            .flatten()
-            .map(|entry| entry.path())
-            .find(|p| {
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with(&format!("{stem}-")))
-            })
-            .expect("the snapshot PNG");
-        let image = image::open(&png).unwrap().into_rgba8();
-        let _ = std::fs::remove_file(&png);
+        let image = pixels(&snapshot, &format!("panel-{tool}"));
         // Across a row through the panel, from the right: the first pixel
         // that is not canvas is the panel's edge.
         let (w, h) = image.dimensions();
@@ -404,6 +390,65 @@ fn the_style_panel_keeps_its_width_with_arrowhead_choices() {
     let (shape, arrow) = (right_edge("r"), right_edge("a"));
     assert_eq!(shape, arrow);
     assert!(arrow < 800, "not across the window: {arrow}");
+}
+
+#[test]
+fn a_frame_just_out_of_view_leaves_later_elements_whole() {
+    // The frame lies right of the view while its child, within the cull
+    // margin, is still drawn: on wgpu, iced skipped the child's clip but
+    // not its indices, and the box drawn after it came out garbled.
+    let element = |fields: &str| {
+        format!(
+            r##"{{{fields},"angle":0,"strokeColor":"#1e1e1e","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}}"##
+        )
+    };
+    let frame = [
+        r##""id":"frame","type":"frame","name":"F","x":820,"y":100,"width":300,"height":300,"backgroundColor":"transparent","fillStyle":"solid","seed":1"##,
+        r##""id":"child","type":"rectangle","frameId":"frame","x":830,"y":150,"width":200,"height":200,"backgroundColor":"#ffc9c9","fillStyle":"cross-hatch","seed":2"##,
+    ];
+    let boxed = r##""id":"box","type":"rectangle","x":300,"y":250,"width":200,"height":100,"backgroundColor":"#1971c2","fillStyle":"solid","seed":3"##;
+    let render = |elements: &[&str], name| {
+        let elements: Vec<String> = elements.iter().map(|e| element(e)).collect();
+        let json = format!(
+            r#"{{"type":"excalidraw","elements":[{}]}}"#,
+            elements.join(",")
+        );
+        let mut sketch = Sketch::new(serde_json::from_str::<Scene>(&json).unwrap());
+        sketch.set_origin([0.0, 0.0]);
+        let mut ui = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            (800.0, 600.0),
+            sketch.canvas(),
+        );
+        pixels(&ui.snapshot(&iced::Theme::Light).unwrap(), name)
+    };
+    let with_frame = render(&[frame[0], frame[1], boxed], "frame-out-of-view");
+    let alone = render(&[boxed], "box-alone");
+    assert!(with_frame == alone, "the box drew differently");
+}
+
+/// Reads a snapshot's pixels back from the PNG iced_test writes for it in
+/// the temp directory.
+fn pixels(snapshot: &iced_test::simulator::Snapshot, name: &str) -> image::RgbaImage {
+    let stem = format!("roughdraft-{name}-{}", std::process::id());
+    assert!(
+        snapshot
+            .matches_image(std::env::temp_dir().join(&stem))
+            .unwrap()
+    );
+    let png = std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&format!("{stem}-")))
+        })
+        .expect("the snapshot PNG");
+    let image = image::open(&png).unwrap().into_rgba8();
+    let _ = std::fs::remove_file(&png);
+    image
 }
 
 #[test]
