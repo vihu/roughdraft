@@ -39,7 +39,7 @@ fn kinds(found: &[Problem]) -> Vec<&'static str> {
 fn a_built_diagram_has_no_problems() {
     let built = crate::build::build(
         &json!([
-            {"type": "row", "x": 0, "y": 0, "gap": 120, "children": [
+            {"type": "row", "x": 0, "y": 0, "gap": 160, "children": [
                 {"type": "rectangle", "id": "a", "width": 160, "height": 70, "label": "Browser"},
                 {"type": "ellipse", "id": "b", "label": "API"},
                 {"type": "diamond", "id": "c", "label": "Ok?"},
@@ -188,4 +188,82 @@ fn shapes_on_top_of_each_other_and_arrows_over_shapes() {
     assert_eq!(found[0].ids, ["a", "b"]);
     assert!(found[0].message.contains("20 × 80"), "{}", found[0].message);
     assert_eq!(found[1].ids, ["r", "wall"]);
+}
+
+#[test]
+fn an_arrow_too_short_for_its_label() {
+    let built = crate::build::build(
+        &json!([
+            {"type": "row", "gap": 40, "children": [
+                {"type": "rectangle", "id": "a"},
+                {"type": "rectangle", "id": "b"},
+            ]},
+            {"type": "arrow", "id": "r", "start": {"id": "a"}, "end": {"id": "b"}, "label": "Request"},
+        ]),
+        Box::new(ApproxMeasure),
+    )
+    .unwrap();
+    let found = check(&serde_json::to_value(&built.scene).unwrap(), &ApproxMeasure).unwrap();
+    assert_eq!(kinds(&found), ["arrow-too-short"], "{found:#?}");
+    // "Request" measures 77, plus 35 clear at each end.
+    assert!(
+        found[0].message.contains("needs about 147"),
+        "{}",
+        found[0].message
+    );
+}
+
+#[test]
+fn two_arrows_between_the_same_shapes_lie_on_top_of_each_other() {
+    let built = crate::build::build(
+        &json!([
+            {"type": "row", "gap": 300, "children": [
+                {"type": "rectangle", "id": "a"},
+                {"type": "rectangle", "id": "b"},
+            ]},
+            {"type": "arrow", "id": "there", "start": {"id": "a"}, "end": {"id": "b"}, "label": "ask"},
+            {"type": "arrow", "id": "back", "start": {"id": "b"}, "end": {"id": "a"}, "label": "reply"},
+        ]),
+        Box::new(ApproxMeasure),
+    )
+    .unwrap();
+    let found = check(&serde_json::to_value(&built.scene).unwrap(), &ApproxMeasure).unwrap();
+    assert_eq!(
+        kinds(&found),
+        ["arrow-label-overlap", "arrows-stacked"],
+        "{found:#?}"
+    );
+    assert_eq!(found[1].ids, ["there", "back"]);
+}
+
+#[test]
+fn an_arrow_through_a_frame_it_has_no_end_in() {
+    let built = crate::build::build(
+        &json!([
+            {"type": "row", "gap": 100, "children": [
+                {"type": "rectangle", "id": "a"},
+                {"type": "rectangle", "id": "middle"},
+                {"type": "rectangle", "id": "b"},
+            ]},
+            {"type": "frame", "id": "f", "name": "Backend services", "children": ["middle"]},
+            {"type": "arrow", "id": "long", "start": {"id": "a"}, "end": {"id": "b"},
+             "x": 0, "y": 0, "points": [[50, 50], [250, 20], [450, 50]]},
+            {"type": "arrow", "id": "in", "start": {"id": "a"}, "end": {"id": "middle"}},
+            {"type": "rectangle", "id": "above", "x": 200, "y": -200},
+            {"type": "arrow", "id": "down", "start": {"id": "above"}, "end": {"id": "middle"},
+             "x": 0, "y": 0, "points": [[250, -150], [220, 50]]},
+        ]),
+        Box::new(ApproxMeasure),
+    )
+    .unwrap();
+    let found = check(&serde_json::to_value(&built.scene).unwrap(), &ApproxMeasure).unwrap();
+    // Over the shape and through its frame; the arrow into the frame is
+    // fine from the side, but from above it crosses the frame's name.
+    assert_eq!(kinds(&found), ["arrow-crosses"; 3], "{found:#?}");
+    assert_eq!(found[1].ids, ["long", "f"]);
+    assert!(
+        found[2].message.contains("the name of frame"),
+        "{}",
+        found[2].message
+    );
 }

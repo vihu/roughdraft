@@ -27,7 +27,7 @@ const OUTLINE_WIDTH: f64 = 2.0;
 const TITLE_OFFSET_Y: f64 = 3.0;
 
 /// Title font: Helvetica, 14, line height 1.25.
-const TITLE_FONT: (u32, f64, f64) = (2, 14.0, 1.25);
+pub(crate) const TITLE_FONT: (u32, f64, f64) = (2, 14.0, 1.25);
 
 /// Title color in light mode (`nameColorLightTheme`).
 const TITLE_COLOR: Rgba = Rgba::rgb(

@@ -2,6 +2,7 @@
 //! `roughdraft check` reports (PLAN-002). Aimed at files written by hand or
 //! by an agent, where the usual faults are guessed text sizes, one-sided
 //! bindings and shapes placed on top of each other.
+mod layout;
 #[cfg(test)]
 mod tests;
 
@@ -12,7 +13,6 @@ use serde_json::Value;
 use crate::edit::{Measure, arrow_points, distance_to_outline, label_height_room, max_label_width};
 use crate::geometry::{self, Bounds, Point};
 use crate::hit::container_id;
-use crate::render::segment_inside;
 use crate::scene::{ArrowEnd, Element, Kind, Scene};
 
 /// How bad a problem is.
@@ -60,8 +60,10 @@ pub fn check(file: &Value, measure: &dyn Measure) -> Result<Vec<Problem>, serde_
         text(element, &by_id, measure, &mut problems);
         bindings(element, &by_id, &mut problems);
     }
-    overlaps(&live, &mut problems);
-    crossings(&live, &by_id, &mut problems);
+    layout::overlaps(&live, &mut problems);
+    layout::crossings(&live, &by_id, measure, &mut problems);
+    layout::arrow_labels(&live, &by_id, &mut problems);
+    layout::stacked_arrows(&live, &mut problems);
     problems.sort_by_key(|p| p.severity != Severity::Error);
     Ok(problems)
 }
@@ -77,10 +79,7 @@ const TEXT_SLACK: (f64, f64) = (2.0, 0.03);
 /// detached from its shape.
 const END_SLACK: f64 = 10.0;
 
-/// Overlaps and crossings thinner than this are edges touching.
-const TOUCH: f64 = 2.0;
-
-fn problem(
+pub(super) fn problem(
     kind: &'static str,
     severity: Severity,
     elements: &[&Element],
@@ -361,105 +360,6 @@ fn bindings(element: &Element, by_id: &HashMap<&str, &Element>, problems: &mut V
     }
 }
 
-/// Shapes and free text that partly cover each other. One wholly inside
-/// another (a panel, a note on a shape) and members of one group are fine.
-fn overlaps(live: &[&Element], problems: &mut Vec<Problem>) {
-    let solid: Vec<(&Element, Bounds)> = live
-        .iter()
-        .filter(|e| is_solid(e))
-        .map(|e| (*e, geometry::element_bounds(e)))
-        .collect();
-    for (i, (a, box_a)) in solid.iter().enumerate() {
-        for (b, box_b) in &solid[i + 1..] {
-            let shared_group = a.group_ids().iter().any(|g| b.group_ids().contains(g));
-            if shared_group || within(*box_a, *box_b) || within(*box_b, *box_a) {
-                continue;
-            }
-            let width = box_a[2].min(box_b[2]) - box_a[0].max(box_b[0]);
-            let height = box_a[3].min(box_b[3]) - box_a[1].max(box_b[1]);
-            if width > TOUCH && height > TOUCH {
-                problems.push(problem(
-                    "overlap",
-                    Severity::Warning,
-                    &[a, b],
-                    format!(
-                        "\"{}\" and \"{}\" overlap by {width:.0} × {height:.0}; move one, or put one wholly inside the other",
-                        a.base.id, b.base.id
-                    ),
-                ));
-            }
-        }
-    }
-}
-
-/// Lines and arrows that pass over a shape they do not start or end at.
-/// Shapes holding an end (a panel around both) are passed over on purpose.
-fn crossings(live: &[&Element], by_id: &HashMap<&str, &Element>, problems: &mut Vec<Problem>) {
-    let solid: Vec<(&Element, Bounds)> = live
-        .iter()
-        .filter(|e| is_solid(e))
-        .map(|e| (*e, geometry::element_bounds(e)))
-        .collect();
-    for arrow in live
-        .iter()
-        .filter(|e| matches!(e.kind, Kind::Arrow(_) | Kind::Line(_)))
-    {
-        let points = arrow_points(arrow);
-        let (Some(&first), Some(&last)) = (points.first(), points.last()) else {
-            continue;
-        };
-        let ends: Vec<&str> = [ArrowEnd::Start, ArrowEnd::End]
-            .iter()
-            .filter_map(|&end| arrow.binding(end))
-            .filter_map(|b| by_id.get(b.element_id.as_str()).map(|e| e.base.id.as_str()))
-            .collect();
-        for (shape, bounds) in &solid {
-            let inner = [
-                bounds[0] + TOUCH,
-                bounds[1] + TOUCH,
-                bounds[2] - TOUCH,
-                bounds[3] - TOUCH,
-            ];
-            if ends.contains(&shape.base.id.as_str())
-                || contains(*bounds, first)
-                || contains(*bounds, last)
-                || inner[0] >= inner[2]
-                || inner[1] >= inner[3]
-            {
-                continue;
-            }
-            if points
-                .windows(2)
-                .any(|s| segment_inside(s[0], s[1], inner).is_some())
-            {
-                problems.push(problem(
-                    "arrow-crosses",
-                    Severity::Warning,
-                    &[arrow, shape],
-                    format!(
-                        "\"{}\" passes over \"{}\"; route it around with points, or move \"{}\"",
-                        arrow.base.id, shape.base.id, shape.base.id
-                    ),
-                ));
-            }
-        }
-    }
-}
-
-/// Shapes, pictures and free text: what can sit in the way. Rotated ones
-/// are left out: their boxes are not the space they cover.
-fn is_solid(element: &Element) -> bool {
-    if element.base.angle != 0.0 {
-        return false;
-    }
-    match &element.kind {
-        Kind::Rectangle | Kind::Diamond | Kind::Ellipse => true,
-        Kind::Text(_) => container_id(element).is_none(),
-        Kind::Other(kind) => kind == "image",
-        _ => false,
-    }
-}
-
 /// Whether `element` lists `id` in its `boundElements`.
 fn lists(element: &Element, id: &str) -> bool {
     element
@@ -470,14 +370,6 @@ fn lists(element: &Element, id: &str) -> bool {
         .any(|b| b.id == id)
 }
 
-fn contains([x1, y1, x2, y2]: Bounds, [x, y]: Point) -> bool {
+pub(super) fn contains([x1, y1, x2, y2]: Bounds, [x, y]: Point) -> bool {
     (x1..=x2).contains(&x) && (y1..=y2).contains(&y)
-}
-
-/// Whether `inner` lies within `outer`.
-fn within(inner: Bounds, outer: Bounds) -> bool {
-    inner[0] >= outer[0] - TOUCH
-        && inner[1] >= outer[1] - TOUCH
-        && inner[2] <= outer[2] + TOUCH
-        && inner[3] <= outer[3] + TOUCH
 }
