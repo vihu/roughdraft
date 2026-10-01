@@ -60,7 +60,12 @@ fn our_export_matches_excalidraw_export() {
             continue;
         };
         let scene: Scene = serde_json::from_value(fixture.scene).unwrap();
-        let ours = roughdraft::svg::export(&scene, &roughdraft::svg::SvgOptions::default());
+        // Marks only: the fonts are not compared.
+        let options = roughdraft::svg::SvgOptions {
+            embed_fonts: false,
+            ..Default::default()
+        };
+        let ours = roughdraft::svg::export(&scene, &options);
         let name = &fixture.name;
         failures.extend(
             compare_marks(svg_marks(reference), svg_marks(&ours))

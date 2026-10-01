@@ -18,9 +18,10 @@ pub struct SvgOptions {
     pub background: bool,
     /// Apply Excalidraw's dark filter to the whole image.
     pub dark: bool,
-    /// Embed the bundled fonts the text uses, so the file renders the same
-    /// everywhere (Excalifont alone adds about 256 KB); otherwise text names
-    /// the font and relies on the viewer.
+    /// Embed the bundled fonts the text uses, as Excalidraw's export does,
+    /// so the file renders the same everywhere (Excalifont alone adds about
+    /// 256 KB). Off, text only names the font: for hosts that show the SVG
+    /// inline on a page that loads the fonts itself.
     pub embed_fonts: bool,
 }
 
@@ -30,7 +31,7 @@ impl Default for SvgOptions {
             padding: 10.0,
             background: true,
             dark: false,
-            embed_fonts: false,
+            embed_fonts: true,
         }
     }
 }
@@ -460,13 +461,10 @@ mod tests {
     }
 
     #[test]
-    fn embeds_each_bundled_font_the_text_uses() {
+    fn embeds_each_bundled_font_the_text_uses_unless_told_not_to() {
         let json = std::fs::read_to_string("tests/fixtures/scenes/fonts.excalidraw").unwrap();
         let mut scene: crate::scene::Scene = serde_json::from_str(&json).unwrap();
-        let options = super::SvgOptions {
-            embed_fonts: true,
-            ..Default::default()
-        };
+        let options = super::SvgOptions::default();
         let svg = super::export(&scene, &options);
         for name in [
             "Virgil",
@@ -485,6 +483,11 @@ mod tests {
         scene.elements.retain(|e| e.base.id == "t6");
         let svg = super::export(&scene, &options);
         assert_eq!(svg.matches("@font-face").count(), 1, "only Nunito");
+        let bare = super::SvgOptions {
+            embed_fonts: false,
+            ..options
+        };
+        assert!(!super::export(&scene, &bare).contains("@font-face"));
     }
 
     #[test]

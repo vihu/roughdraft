@@ -235,7 +235,11 @@ fn check(editor: &Editor, seed: u64, step: usize, full: bool) {
         for element in &saved.elements {
             let _ = roughdraft::render::render_element(element, "#ffffff");
         }
-        let _ = roughdraft::svg::export(&saved, &roughdraft::svg::SvgOptions::default());
+        let options = roughdraft::svg::SvgOptions {
+            embed_fonts: false,
+            ..Default::default()
+        };
+        let _ = roughdraft::svg::export(&saved, &options);
     }
 }
 
