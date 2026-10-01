@@ -12,7 +12,7 @@ in excalidraw.com unchanged, and the other way round.
 - An iced-free core (`scene`, `render`, `edit`, `svg`), so scenes can be
   edited, tested and exported to SVG without a window.
 
-Status: 0.4.0, not on crates.io. Targets Linux (Wayland) and macOS. It is both
+Status: 0.4.1, not on crates.io. Targets Linux (Wayland) and macOS. It is both
 a library for iced apps and a standalone editor (the `roughdraft` app).
 
 ## Embedding
