@@ -211,7 +211,9 @@ impl Parse {
             ));
             return None;
         }
-        if !in_group && !has_position && !linear {
+        // A frame with children is fitted around them.
+        let fitted = kind == "frame" && json.get("children").is_some();
+        if !in_group && !has_position && !linear && !fitted {
             self.warn(path, "no x/y; placed at 0, 0");
         }
         let children = json
@@ -224,6 +226,17 @@ impl Parse {
                     .collect()
             })
             .unwrap_or_default();
+        if kind != "text" {
+            for key in ["fontFamily", "fontSize"]
+                .iter()
+                .filter(|k| json.contains_key(**k))
+            {
+                self.warn(
+                    &format!("{path}.{key}"),
+                    &format!("{key} does nothing on a {kind}; put it in the label: {{\"label\": {{\"text\": ..., \"{key}\": ...}}}}"),
+                );
+            }
+        }
         for font in [
             json.get("fontFamily"),
             label.as_ref().and_then(|l| l.get("fontFamily")),

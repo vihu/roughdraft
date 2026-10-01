@@ -205,9 +205,34 @@ fn problems_name_where_they_are() {
 fn ignored_positions_and_unbundled_fonts_are_warned_about() {
     let built = built(json!([
         {"type": "row", "children": [{"type": "text", "x": 5, "y": 5, "text": "a", "fontFamily": 3}]},
+        {"type": "rectangle", "x": 0, "y": 100, "label": "b", "fontFamily": 6},
     ]));
     let messages: Vec<&str> = built.warnings.iter().map(|w| w.message.as_str()).collect();
-    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert_eq!(messages.len(), 3, "{messages:?}");
     assert!(messages[0].contains("x/y ignored"));
     assert!(messages[1].contains("fontFamily 3"));
+    assert!(messages[2].contains("put it in the label"));
+}
+
+#[test]
+fn a_label_that_outgrows_its_shape_is_warned_about() {
+    // "Hello there" measures 121 at 20 and the box has room for 90.
+    let built = built(json!([
+        {"type": "rectangle", "x": 0, "y": 0, "width": 100, "height": 40, "label": "Hello there\nfriend"},
+    ]));
+    let paths: Vec<&str> = built.warnings.iter().map(|w| w.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        ["elements[0].height", "elements[0].label"],
+        "{:?}",
+        built.warnings
+    );
+    assert!(built.warnings[0].message.contains("grew from 40"));
+    assert!(
+        built.warnings[1]
+            .message
+            .contains("the 90 the shape has room for"),
+        "{}",
+        built.warnings[1].message
+    );
 }

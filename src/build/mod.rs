@@ -297,6 +297,37 @@ impl Builder {
                 }
             }
             self.editor.layout_text(label_index, &text);
+            self.warn_about_fit(item, index, &text);
+        }
+    }
+
+    /// Warns when a label did not fit as written: it made its shape taller
+    /// than the given `height`, or re-wrapped lines broken by hand.
+    fn warn_about_fit(&mut self, item: &Item, index: usize, text: &str) {
+        let elements = &self.editor.scene().elements;
+        let (shape, label) = (&elements[index], &elements[index + 1]);
+        if let Some(given) = item.json.get("height").and_then(Value::as_f64)
+            && shape.base.height > given + 0.5
+        {
+            self.warnings.push(issue(
+                &format!("{}.height", item.path),
+                &format!(
+                    "the label needs {:.0} high, so the shape grew from {given:.0}; make it taller or wider, or shorten the label",
+                    shape.base.height
+                ),
+            ));
+        }
+        if let Kind::Text(wrapped) = &label.kind
+            && text.contains('\n')
+            && wrapped.text != text
+        {
+            let room = max_label_width(shape, wrapped.font_size);
+            self.warnings.push(issue(
+                &format!("{}.label", item.path),
+                &format!(
+                    "a line of the label is wider than the {room:.0} the shape has room for, so it was wrapped again; widen the shape or break the line sooner"
+                ),
+            ));
         }
     }
 
