@@ -1,5 +1,8 @@
 # roughdraft
 
+[![CI](https://github.com/vihu/roughdraft/actions/workflows/ci.yml/badge.svg)](https://github.com/vihu/roughdraft/actions/workflows/ci.yml)
+[![Release](https://github.com/vihu/roughdraft/actions/workflows/release.yml/badge.svg)](https://github.com/vihu/roughdraft/actions/workflows/release.yml)
+
 A native, Excalidraw-compatible sketch canvas for [iced]. It reads, renders,
 edits and writes [Excalidraw] 0.18 scene JSON, so a drawing made here opens
 in excalidraw.com unchanged, and the other way round.
