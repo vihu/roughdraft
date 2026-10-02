@@ -35,6 +35,13 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.3" date="2026-10-02">
+      <description>
+        <ul>
+          <li>Rendered web pages show the drawing's title once, and the download link matches the theme button</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-10-01">
       <description>
         <ul>
