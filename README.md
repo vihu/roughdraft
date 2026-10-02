@@ -1,8 +1,17 @@
 # roughdraft
 
+[![CI](https://github.com/vihu/roughdraft/actions/workflows/ci.yml/badge.svg)](https://github.com/vihu/roughdraft/actions/workflows/ci.yml)
+[![Release](https://github.com/vihu/roughdraft/actions/workflows/release.yml/badge.svg)](https://github.com/vihu/roughdraft/actions/workflows/release.yml)
+
 A native, Excalidraw-compatible sketch canvas for [iced]. It reads, renders,
 edits and writes [Excalidraw] 0.18 scene JSON, so a drawing made here opens
 in excalidraw.com unchanged, and the other way round.
+
+## Demo
+
+https://github.com/user-attachments/assets/45e2d751-3496-411c-9202-47acb6a45f9d
+
+## Design
 
 - Same `seed`, same wobble: shapes are drawn with a seed-exact port of
   rough.js 4.6.4, the version Excalidraw 0.18 uses.
