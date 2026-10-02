@@ -4,6 +4,10 @@ A native, Excalidraw-compatible sketch canvas for [iced]. It reads, renders,
 edits and writes [Excalidraw] 0.18 scene JSON, so a drawing made here opens
 in excalidraw.com unchanged, and the other way round.
 
+## Demo
+
+## Design
+
 - Same `seed`, same wobble: shapes are drawn with a seed-exact port of
   rough.js 4.6.4, the version Excalidraw 0.18 uses.
 - Text in Excalidraw's own fonts (Excalifont, Virgil, Nunito, Lilita One,
