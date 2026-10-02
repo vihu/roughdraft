@@ -6,6 +6,8 @@ in excalidraw.com unchanged, and the other way round.
 
 ## Demo
 
+https://github.com/user-attachments/assets/45e2d751-3496-411c-9202-47acb6a45f9d
+
 ## Design
 
 - Same `seed`, same wobble: shapes are drawn with a seed-exact port of
