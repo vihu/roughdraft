@@ -13,14 +13,15 @@ pub enum StartTheme {
     Dark,
 }
 
-/// Returns a page showing `scene` under `title`, with a link that downloads
-/// it as `file_name`.
+/// Returns a page showing `scene`, titled `title`, with a link that
+/// downloads it as `file_name`.
 ///
 /// Everything is inside the page: the SVG with its fonts, and the scene for
 /// the download link. It starts in `start`, with Excalidraw's dark filter
 /// for dark; a button switches between light and dark and remembers the
 /// choice in the browser. Without JavaScript the button stays hidden and the
-/// page keeps its start theme. The drawing fits the window's width.
+/// page keeps its start theme. The drawing fits the window's width. The
+/// heading is for screen readers only: the drawing shows its own title.
 pub fn page(scene: &Scene, title: &str, file_name: &str, start: StartTheme) -> String {
     let saved = scene.saved();
     let drawing = svg::export(&saved, &SvgOptions::default());
@@ -42,7 +43,7 @@ pub fn page(scene: &Scene, title: &str, file_name: &str, start: StartTheme) -> S
 </head>
 <body>
 <header>
-<h1>{title}</h1>
+<h1 class="visually-hidden">{title}</h1>
 <div class="actions">
 <button type="button" id="theme" hidden aria-label="Switch to dark mode">Dark mode</button>
 <a download="{file_name}" href="data:application/vnd.excalidraw+json;base64,{source}">Download {file_name}</a>
@@ -63,11 +64,10 @@ const STYLE: &str = r#"
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="dark"] { color-scheme: dark; }
   body { margin: 0; padding: 24px; background: #ffffff; color: #1e1e1e; font: 15px/1.5 system-ui, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
-  h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
-  a { color: inherit; }
-  button { font: inherit; color: inherit; background: none; border: 1px solid currentColor; border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+  header { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, .actions a { font: inherit; color: inherit; background: none; border: 1px solid currentColor; border-radius: 6px; padding: 2px 10px; cursor: pointer; text-decoration: none; }
   button[hidden] { display: none; }
   a:focus-visible, button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
   figure { margin: 0; }

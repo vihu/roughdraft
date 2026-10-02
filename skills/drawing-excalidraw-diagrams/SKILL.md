@@ -31,10 +31,12 @@ Run `roughdraft help` first. If it is not found, or it has no `check` and
    wrong. In a diagram you built, warnings are wrong too.
 5. `roughdraft render <name>.excalidraw -o <tmp>/<name>.png`
    Look at the PNG. Fix crowding, long detours, labels that are hard to
-   read, and anything that does not say what was asked. The PNG is for
-   you: deliver it only when asked.
-6. Repeat 3 to 5 until `check` prints `"problems": []` and the PNG reads
-   well.
+   read, and anything that does not say what was asked. Then the size:
+   `width` and `height` in render's output, divided by `scale`, must be
+   at most 1600 and 900, or the reader scrolls (fixes: Fit one screen,
+   under Layout). The PNG is for you: deliver it only when asked.
+6. Repeat 3 to 5 until `check` prints `"problems": []`, the PNG reads
+   well, and the drawing fits one screen (see Layout).
 
 All three commands print JSON on stdout and never prompt. `render` takes
 `--dark` (Excalidraw's dark mode, PNG and SVG) and `--scale N` (PNG,
@@ -46,22 +48,80 @@ A JSON array of items. A complete example:
 
 ```json
 [
-  {"type": "text", "id": "title", "x": 0, "y": -90, "text": "Checkout", "fontSize": 28},
-  {"type": "row", "x": 0, "y": 0, "gap": 200, "children": [
-    {"type": "rectangle", "id": "web", "width": 180, "height": 80,
-     "label": "Web app", "backgroundColor": "#a5d8ff", "roundness": {"type": 3}},
-    {"type": "rectangle", "id": "api", "width": 180, "height": 80,
-     "label": "Orders API", "backgroundColor": "#b2f2bb", "roundness": {"type": 3}},
-    {"type": "column", "gap": 60, "children": [
-      {"type": "rectangle", "id": "db", "width": 180, "height": 80, "label": "Postgres"},
-      {"type": "rectangle", "id": "queue", "width": 180, "height": 80, "label": "Email queue"}
-    ]}
-  ]},
-  {"type": "arrow", "id": "web-api", "start": {"id": "web"}, "end": {"id": "api"},
-   "label": {"text": "POST /orders", "fontSize": 16}},
-  {"type": "arrow", "id": "api-db", "start": {"id": "api"}, "end": {"id": "db"}},
-  {"type": "arrow", "id": "api-queue", "start": {"id": "api"}, "end": {"id": "queue"},
-   "strokeStyle": "dashed"}
+  {
+    "type": "text",
+    "id": "title",
+    "x": 0,
+    "y": -90,
+    "text": "Checkout",
+    "fontSize": 28
+  },
+  {
+    "type": "row",
+    "x": 0,
+    "y": 0,
+    "gap": 200,
+    "children": [
+      {
+        "type": "rectangle",
+        "id": "web",
+        "width": 180,
+        "height": 80,
+        "label": "Web app",
+        "backgroundColor": "#a5d8ff",
+        "roundness": { "type": 3 }
+      },
+      {
+        "type": "rectangle",
+        "id": "api",
+        "width": 180,
+        "height": 80,
+        "label": "Orders API",
+        "backgroundColor": "#b2f2bb",
+        "roundness": { "type": 3 }
+      },
+      {
+        "type": "column",
+        "gap": 60,
+        "children": [
+          {
+            "type": "rectangle",
+            "id": "db",
+            "width": 180,
+            "height": 80,
+            "label": "Postgres"
+          },
+          {
+            "type": "rectangle",
+            "id": "queue",
+            "width": 180,
+            "height": 80,
+            "label": "Email queue"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "arrow",
+    "id": "web-api",
+    "start": { "id": "web" },
+    "end": { "id": "api" },
+    "label": { "text": "POST /orders", "fontSize": 16 }
+  },
+  {
+    "type": "arrow",
+    "id": "api-db",
+    "start": { "id": "api" },
+    "end": { "id": "db" }
+  },
+  {
+    "type": "arrow",
+    "id": "api-queue",
+    "start": { "id": "api" },
+    "end": { "id": "queue" },
+    "strokeStyle": "dashed"
+  }
 ]
 ```
 
@@ -115,6 +175,12 @@ Arrows with bends, frames, arrowheads and every field:
   around it, or the shapes move (`check` reports `arrow-crosses`). `build`
   prints where every shape landed (`shapes`); with `"x": 0, "y": 0` an
   arrow's `points` are in those coordinates.
+- Fit one screen: the whole drawing, title included, within 1600 wide
+  and 900 high. Excalidraw opens a file at 100% zoom, so anything bigger
+  makes the reader scroll. `render` to PNG prints `width` and `height`:
+  divide them by `scale`. Too wide: wrap a long row into a second row
+  below it that runs back right to left, or turn the flow top to bottom.
+  Too tall: the reverse. Still too big: shorten labels, then split.
 - 4 to 12 shapes per diagram. Split bigger subjects into several diagrams.
 - A title as free text above the first row, `fontSize` 28, about 90 above
   it. Put a note (free text, `fontSize` 16) in a row or column with what
@@ -130,13 +196,13 @@ Arrows with bends, frames, arrowheads and every field:
 Excalidraw's palette. Keep strokes and text `#1e1e1e` and use fills for
 meaning, one fill per kind of thing:
 
-| Use | Fill | Stroke |
-| --- | --- | --- |
+| Use                         | Fill      | Stroke    |
+| --------------------------- | --------- | --------- |
 | blue: clients, entry points | `#a5d8ff` | `#1971c2` |
-| green: services, success | `#b2f2bb` | `#2f9e44` |
-| yellow: storage, state | `#ffec99` | `#f08c00` |
-| red: errors, danger | `#ffc9c9` | `#e03131` |
-| violet: external systems | `#d0bfff` | `#6741d9` |
+| green: services, success    | `#b2f2bb` | `#2f9e44` |
+| yellow: storage, state      | `#ffec99` | `#f08c00` |
+| red: errors, danger         | `#ffc9c9` | `#e03131` |
+| violet: external systems    | `#d0bfff` | `#6741d9` |
 | grey: infrastructure, muted | `#e9ecef` | `#868e96` |
 
 Coloured strokes suit arrows and frames that carry a meaning (a failure
@@ -145,16 +211,16 @@ for light mode; `render --dark` shows how Excalidraw's dark mode shows them.
 
 ## What check reports
 
-| Kind | Fix in the skeleton |
-| --- | --- |
-| `label-overflow` | widen or heighten the shape, or shorten the label |
-| `arrow-too-short` | raise the `gap` between its shapes by the amount given, or shorten the label |
-| `arrow-label-overlap` | move the shape or the arrow the label covers |
-| `arrows-stacked` | one arrow with `startArrowhead`, or route one with `points` |
-| `overlap` | move one shape, raise a `gap`, or put one wholly inside the other |
-| `arrow-crosses` | move what it crosses (a shape, a frame, a frame's name), or route it around with `points` |
-| `text-size`, `binding-*`, `arrow-end-off-shape`, `zero-size`, `duplicate-id`, `empty-text` | files written by hand; built files do not have them. Rebuild. |
-| `font-not-bundled` | use `fontFamily` 5, 6 or 8 |
+| Kind                                                                                       | Fix in the skeleton                                                                       |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `label-overflow`                                                                           | widen or heighten the shape, or shorten the label                                         |
+| `arrow-too-short`                                                                          | raise the `gap` between its shapes by the amount given, or shorten the label              |
+| `arrow-label-overlap`                                                                      | move the shape or the arrow the label covers                                              |
+| `arrows-stacked`                                                                           | one arrow with `startArrowhead`, or route one with `points`                               |
+| `overlap`                                                                                  | move one shape, raise a `gap`, or put one wholly inside the other                         |
+| `arrow-crosses`                                                                            | move what it crosses (a shape, a frame, a frame's name), or route it around with `points` |
+| `text-size`, `binding-*`, `arrow-end-off-shape`, `zero-size`, `duplicate-id`, `empty-text` | files written by hand; built files do not have them. Rebuild.                             |
+| `font-not-bundled`                                                                         | use `fontFamily` 5, 6 or 8                                                                |
 
 Each problem names its elements in `ids`. A label's id is its shape's id
 plus `-label`.
@@ -169,8 +235,9 @@ diagram goes:
 - `.html`: a web page for any static host. One self-contained file with the
   drawing, a link to download the `.excalidraw`, and a light/dark toggle
   that remembers the reader's choice. It follows the reader's system theme
-  until they switch; `--dark` starts it dark instead. `--title` sets its
-  heading.
+  until they switch; `--dark` starts it dark instead. `--title` sets the
+  browser tab's title (default: the file name). The page shows no heading
+  of its own: the drawing's title is the page's title.
 - The `.excalidraw` itself, for anyone who will edit it.
 
 Never publish on your own. When asked to publish, hand the file to the
