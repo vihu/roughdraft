@@ -35,6 +35,13 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.4" date="2026-10-04">
+      <description>
+        <ul>
+          <li>The main menu shows the app's version</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.3" date="2026-10-02">
       <description>
         <ul>
