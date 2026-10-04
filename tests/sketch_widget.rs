@@ -455,6 +455,7 @@ fn pixels(snapshot: &iced_test::simulator::Snapshot, name: &str) -> image::RgbaI
 fn the_main_menu_asks_the_host_and_switches_the_grid_and_theme() {
     let mut sketch = Sketch::new(Scene::default());
     sketch.set_menu(vec![roughdraft::widget::Request::Save]);
+    sketch.set_menu_footer("host 1.2.3");
     // The menu button sits in the top-left corner.
     run(&mut sketch, |ui| {
         ui.point_at(Point::new(30.0, 30.0));
@@ -467,6 +468,7 @@ fn the_main_menu_asks_the_host_and_switches_the_grid_and_theme() {
             (800.0, 600.0),
             sketch.view(),
         );
+        ui.find("host 1.2.3").expect("the host's footer");
         ui.click("Save").expect("the host's item");
         ui.into_messages().collect()
     };

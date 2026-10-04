@@ -87,6 +87,8 @@ pub struct Sketch {
     /// Host actions the main menu offers, and whether it is open.
     menu: Vec<Request>,
     menu_open: bool,
+    /// A line of text under the main menu's items, such as a version.
+    menu_footer: Option<String>,
 }
 
 /// An element as last rendered.
@@ -190,6 +192,7 @@ impl Sketch {
             ring: canvas::Cache::new(),
             menu: Vec::new(),
             menu_open: false,
+            menu_footer: None,
         };
         sketch.refresh();
         let origin = content_origin(sketch.drawings());
