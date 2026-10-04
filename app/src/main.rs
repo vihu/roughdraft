@@ -138,6 +138,7 @@ impl App {
             Request::ExportSvg,
             Request::InsertImage,
         ]);
+        sketch.set_menu_footer(concat!("roughdraft ", env!("CARGO_PKG_VERSION")));
         Self {
             path,
             saved: sketch.scene().version(),

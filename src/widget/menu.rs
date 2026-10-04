@@ -1,6 +1,6 @@
 //! The main menu in the top-left corner, like Excalidraw's: the actions
 //! the host offers (open, save, export, ...), the grid and the dark/light
-//! switch.
+//! switch, and a line of text from the host such as its version.
 use iced::widget::{button, column, container, opaque, rule, text};
 use iced::{Element, Length};
 
@@ -61,6 +61,12 @@ impl Sketch {
     pub fn set_menu(&mut self, items: Vec<Request>) {
         self.menu = items;
     }
+
+    /// Sets a line of text shown under the main menu's items, such as the
+    /// host's name and version. None by default.
+    pub fn set_menu_footer(&mut self, footer: impl Into<String>) {
+        self.menu_footer = Some(footer.into());
+    }
 }
 
 // Private API
@@ -100,6 +106,11 @@ impl Sketch {
             };
             items = items.push(item(grid, Message(Input::Command(Command::ToggleGrid))));
             items = items.push(item(theme, Message(Input::ToggleAppearance)));
+            if let Some(footer) = &self.menu_footer {
+                items = items
+                    .push(rule::horizontal(1))
+                    .push(container(text(footer).size(12).style(text::secondary)).padding([6, 10]));
+            }
             content = content.push(
                 container(items)
                     .width(Length::Fixed(MENU_WIDTH))
