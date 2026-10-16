@@ -174,12 +174,6 @@ impl Sketch {
             .is_some_and(|h| h.handles.is_empty() && !h.points.is_empty());
         // Selected groups get one dashed box instead of per-element borders.
         for (_, [x1, y1, x2, y2]) in self.editor.selected_groups() {
-            let corners = [
-                [x1 - pad, y1 - pad],
-                [x2 + pad, y1 - pad],
-                [x2 + pad, y2 + pad],
-                [x1 - pad, y2 + pad],
-            ];
             let group_line = Stroke {
                 style: Style::Solid(self.paint(Rgba::BLACK)),
                 width: 1.0,
@@ -189,7 +183,10 @@ impl Sketch {
                 },
                 ..Stroke::default()
             };
-            frame.stroke(&polygon(&corners, view), group_line);
+            let bounds = [x1 - pad, y1 - pad, x2 + pad, y2 + pad];
+            if let Some(path) = dashed_box(bounds, view, frame.size(), &group_line) {
+                frame.stroke(&path, group_line);
+            }
         }
         let own_border =
             |e: &&&crate::scene::Element| bordered && !self.editor.in_selected_group(&e.base.id);
@@ -206,13 +203,11 @@ impl Sketch {
         }
         if selected.len() > 1 {
             let [x1, y1, x2, y2] = edit::common_bounds(selected.into_iter());
-            let corners = [
-                [x1 - pad, y1 - pad],
-                [x2 + pad, y1 - pad],
-                [x2 + pad, y2 + pad],
-                [x1 - pad, y2 + pad],
-            ];
-            frame.stroke(&polygon(&corners, view), line(&[2.0, 2.0]));
+            let bounds = [x1 - pad, y1 - pad, x2 + pad, y2 + pad];
+            let dashed = line(&[2.0, 2.0]);
+            if let Some(path) = dashed_box(bounds, view, frame.size(), &dashed) {
+                frame.stroke(&path, dashed);
+            }
         }
         if let Some(handles) = &handles {
             self.draw_handles(frame, handles, view, color);
@@ -272,4 +267,87 @@ fn polygon(corners: &[geometry::Point], transform: Affine) -> Path {
         .chain(std::iter::once(Segment::LineTo(corners[0])))
         .collect();
     paint::to_path(&segments, transform)
+}
+
+/// The outline of `bounds` (scene) on screen for a dashed `stroke`, cut to a
+/// `canvas`-sized view; `None` when none of it shows. iced's wgpu renderer
+/// builds every dash of a path, off screen too, so a box around far-apart
+/// elements at high zoom took gigabytes.
+fn dashed_box(
+    [x1, y1, x2, y2]: geometry::Bounds,
+    view: Affine,
+    canvas: iced::Size,
+    stroke: &Stroke<'_>,
+) -> Option<Path> {
+    let period = f64::from(stroke.line_dash.segments.iter().sum::<f32>());
+    let [x1, y1] = view.apply([x1, y1]);
+    let [x2, y2] = view.apply([x2, y2]);
+    let canvas = [f64::from(canvas.width), f64::from(canvas.height)];
+    let [x1, y1, x2, y2] = cut_to_view([x1, y1, x2, y2], canvas, period)?;
+    Some(polygon(
+        &[[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+        Affine::IDENTITY,
+    ))
+}
+
+/// Cuts screen `bounds` to a period past each edge of the view. Each side
+/// moves by whole periods, so the length along the outline to any point
+/// still on screen, and with it the dash there, stays the same.
+fn cut_to_view(
+    [x1, y1, x2, y2]: geometry::Bounds,
+    [width, height]: [f64; 2],
+    period: f64,
+) -> Option<geometry::Bounds> {
+    let (low, high) = ([-period, -period], [width + period, height + period]);
+    if x2 < low[0] || y2 < low[1] || x1 > high[0] || y1 > high[1] {
+        return None;
+    }
+    let raise = |a: f64, edge: f64| {
+        if a < edge {
+            a + ((edge - a) / period).floor() * period
+        } else {
+            a
+        }
+    };
+    let lower = |b: f64, edge: f64| {
+        if b > edge {
+            b - ((b - edge) / period).floor() * period
+        } else {
+            b
+        }
+    };
+    Some([
+        raise(x1, low[0]),
+        raise(y1, low[1]),
+        lower(x2, high[0]),
+        lower(y2, high[1]),
+    ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cut_to_view;
+
+    #[test]
+    fn dashed_boxes_are_cut_to_the_view_by_whole_periods() {
+        let view = [800.0, 600.0];
+        // Inside the view: unchanged.
+        let inside = [10.5, 20.0, 300.0, 400.25];
+        assert_eq!(cut_to_view(inside, view, 4.0), Some(inside));
+        // Off screen: nothing to draw.
+        assert_eq!(cut_to_view([900.0, 0.0, 1e9, 10.0], view, 4.0), None);
+        // A box 1e9 px across ends within a period past each edge, moved by
+        // whole periods.
+        let huge = [-1e9 + 1.5, -3e8 + 0.5, 1e9 + 2.0, 7e8 + 3.0];
+        let [x1, y1, x2, y2] = cut_to_view(huge, view, 4.0).unwrap();
+        for (cut, edge) in [(x1, -4.0), (y1, -4.0)] {
+            assert!(cut <= edge && cut > edge - 4.0, "{cut} near {edge}");
+        }
+        for (cut, edge) in [(x2, 804.0), (y2, 604.0)] {
+            assert!(cut >= edge && cut < edge + 4.0, "{cut} near {edge}");
+        }
+        for (cut, original) in [(x1, huge[0]), (y1, huge[1]), (x2, huge[2]), (y2, huge[3])] {
+            assert_eq!((cut - original) % 4.0, 0.0, "{cut} from {original}");
+        }
+    }
 }
