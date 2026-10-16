@@ -35,6 +35,14 @@
   </branding>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.5" date="2026-10-16">
+      <description>
+        <ul>
+          <li>Text being typed no longer crashes the app when panning or zooming moves it out of the window</li>
+          <li>Selecting elements far apart and zooming in no longer uses up all memory</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.4" date="2026-10-04">
       <description>
         <ul>
