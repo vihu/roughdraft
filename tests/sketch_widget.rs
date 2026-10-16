@@ -5,6 +5,9 @@ use iced::{Event, Point};
 use roughdraft::scene::Scene;
 use roughdraft::widget::Sketch;
 
+#[path = "common/window.rs"]
+mod window;
+
 #[test]
 fn dragging_on_the_canvas_moves_the_element_under_the_pointer() {
     let json = r##"{"type":"excalidraw","elements":[{"id":"box","type":"rectangle","x":100,"y":100,"width":160,"height":90,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"#a5d8ff","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roundness":null,"roughness":1,"opacity":100,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null}]}"##;
@@ -598,4 +601,46 @@ fn a_selected_arrow_shows_the_pointer_over_its_points_and_middle() {
         "middle"
     );
     assert_eq!(cursor_at(150.0, 100.0), mouse::Interaction::Move, "body");
+}
+
+#[test]
+fn text_being_edited_can_scroll_out_of_the_window() {
+    // Two lines; editing puts the cursor at the end of the second.
+    let json = r##"{"type":"excalidraw","elements":[{"id":"t","type":"text","x":400,"y":100,"width":20,"height":50,"angle":0,"strokeColor":"#1e1e1e","backgroundColor":"transparent","fillStyle":"solid","strokeWidth":2,"strokeStyle":"solid","roughness":1,"opacity":100,"groupIds":[],"frameId":null,"roundness":null,"seed":1,"version":1,"versionNonce":1,"isDeleted":false,"boundElements":null,"locked":false,"text":"a\nb","fontSize":20,"fontFamily":5,"textAlign":"left","verticalAlign":"top","containerId":null,"originalText":"a\nb","autoResize":true,"lineHeight":1.25}]}"##;
+    let mut sketch = Sketch::new(serde_json::from_str::<Scene>(json).unwrap());
+    sketch.set_origin([0.0, 0.0]);
+    let backend = std::env::var("ICED_TEST_BACKEND").ok();
+    let mut renderer = window::renderer(backend.as_deref());
+    let mut ui = window::Window::new(iced::Size::new(800.0, 600.0));
+    let moved = |x, y| {
+        Event::Mouse(mouse::Event::CursorMoved {
+            position: Point::new(x, y),
+        })
+    };
+    let press = Event::Mouse(mouse::Event::ButtonPressed(Button::Left));
+    let release = Event::Mouse(mouse::Event::ButtonReleased(Button::Left));
+    let double_click = [
+        moved(405.0, 110.0),
+        press.clone(),
+        release.clone(),
+        press,
+        release,
+    ];
+    ui.frame(&mut sketch, &mut renderer, &double_click, false);
+    assert!(sketch.editor().editing().is_some(), "double-click edits");
+
+    // The wheel moves the text below the window. The overlay used to get no
+    // height there, so the redraw found the cursor's line not laid out and
+    // iced panicked ("Line layout should be cached").
+    let wheel = Event::Mouse(mouse::Event::WheelScrolled {
+        delta: mouse::ScrollDelta::Pixels { x: 0.0, y: 600.0 },
+    });
+    ui.frame(
+        &mut sketch,
+        &mut renderer,
+        &[moved(600.0, 300.0), wheel],
+        false,
+    );
+    ui.frame(&mut sketch, &mut renderer, &[], false);
+    assert!(sketch.editor().editing().is_some(), "still editing");
 }

@@ -4,11 +4,16 @@
 use std::borrow::Cow;
 
 use iced::advanced::graphics::text::{cosmic_text, font_system, to_attributes};
+use iced::advanced::widget::{Operation, Tree, tree};
+use iced::advanced::{Layout, Shell, Widget, layout, mouse, overlay, renderer};
 use iced::keyboard::{Key, key::Named};
 use iced::widget::text::{LineHeight, Wrapping};
 use iced::widget::text_editor::{self, Binding, KeyPress, Motion, Status};
 use iced::widget::{operation, pin};
-use iced::{Background, Border, Color, Element, Pixels, Point, Task, Theme};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Pixels, Point, Rectangle, Size, Task, Theme,
+    Vector,
+};
 
 use super::{Input, Message, Sketch, paint};
 use crate::color::Rgba;
@@ -92,6 +97,12 @@ impl Sketch {
                 Wrapping::None,
             ),
         };
+        let width = width.max(size);
+        // Every line and one more, for the line Enter adds; at least the
+        // canvas, as `pin` gave a box on screen (labels wrap in cosmic-text
+        // here, measured lines may differ).
+        let height = (element.base.height * zoom + size * text.line_height)
+            .max(f64::from(self.viewport.get().height));
         let [x, y] = self.camera.get().view().apply([x, element.base.y]);
         let color = self.paint(Rgba::parse(&element.base.stroke_color).unwrap_or(Rgba::BLACK));
         let selection = self.paint(Rgba {
@@ -115,7 +126,7 @@ impl Sketch {
             )))
             .padding(0)
             .wrapping(wrapping)
-            .width(width.max(size) as f32)
+            .width(width as f32)
             .style(move |_theme: &Theme, _status: Status| text_editor::Style {
                 background: Background::Color(Color::TRANSPARENT),
                 border: Border::default(),
@@ -123,7 +134,11 @@ impl Sketch {
                 value: color,
                 selection,
             });
-        Some(pin(editor).position(Point::new(x as f32, y as f32)).into())
+        let room = Room {
+            content: editor.into(),
+            size: Size::new(width as f32, height as f32),
+        };
+        Some(pin(room).position(Point::new(x as f32, y as f32)).into())
     }
 
     /// Loads the element's text into the overlay when editing starts on a
@@ -147,5 +162,114 @@ impl Sketch {
                 Task::none()
             }
         }
+    }
+}
+
+/// Lays the text editor out at the size of its text wherever it sits.
+/// `pin` alone gives it only the window left past its position: a box
+/// scrolled past the bottom edge got no height, cosmic-text laid out no line
+/// for the cursor, and iced's editor panicked on the next redraw ("Line
+/// layout should be cached"). Finite, as PageDown moves by the height.
+struct Room<'a> {
+    content: Element<'a, Message>,
+    size: Size,
+}
+
+impl Widget<Message, Theme, iced::Renderer> for Room<'_> {
+    fn tag(&self) -> tree::Tag {
+        self.content.as_widget().tag()
+    }
+
+    fn state(&self) -> tree::State {
+        self.content.as_widget().state()
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, _limits: &layout::Limits) {
+        let limits = layout::Limits::new(Size::ZERO, self.size);
+        self.content.as_widget_mut().layout(tree, renderer, &limits);
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(tree, layout, viewport, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content
+            .as_widget_mut()
+            .update(tree, event, layout, cursor, renderer, shell, viewport);
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content
+            .as_widget()
+            .mouse_interaction(tree, layout, cursor, viewport, renderer)
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content
+            .as_widget()
+            .draw(tree, renderer, theme, style, layout, cursor, viewport);
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+        window: Size,
+    ) -> Vec<overlay::Element<'b, Message, Theme, iced::Renderer>> {
+        self.content
+            .as_widget_mut()
+            .overlay(tree, layout, renderer, viewport, translation, window)
+    }
+}
+
+impl<'a> From<Room<'a>> for Element<'a, Message> {
+    fn from(room: Room<'a>) -> Self {
+        Element::new(room)
     }
 }
