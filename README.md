@@ -159,14 +159,14 @@ The web page holds the drawing (following the viewer's light or dark mode)
 and a link to download the `.excalidraw`, with nothing to fetch, so any
 static host can serve it.
 
-`skills/drawing-excalidraw-diagrams/` is an [Agent Skill] that teaches a
+`skills/roughdraft/` is an [Agent Skill] that teaches a
 coding agent (Claude Code, pi, and others that read Agent Skills) to draw
 with them: write a skeleton, build, check, render, look, fix. Link the
 folder where your agent looks for skills:
 
 ```text
-ln -s "$PWD/skills/drawing-excalidraw-diagrams" ~/.claude/skills/   # Claude Code
-ln -s "$PWD/skills/drawing-excalidraw-diagrams" ~/.agents/skills/   # pi, and others
+ln -s "$PWD/skills/roughdraft" ~/.claude/skills/   # Claude Code
+ln -s "$PWD/skills/roughdraft" ~/.agents/skills/   # pi, and others
 ```
 
 The agent needs `roughdraft` on its `PATH`: the AppImage renamed to

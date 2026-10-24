@@ -1,5 +1,5 @@
 ---
-name: drawing-excalidraw-diagrams
+name: roughdraft
 description: Draws hand-drawn Excalidraw diagrams (architecture, request flows, pipelines, component maps) as .excalidraw files with the roughdraft CLI, which builds a complete file from a short JSON skeleton, checks it for layout faults, renders a PNG to look at, and exports SVG or a self-contained web page to share. Use when asked for an Excalidraw diagram, a .excalidraw file, or a hand-drawn or whiteboard-style diagram, or to check or fix an existing .excalidraw file.
 license: MIT
 compatibility: Requires the roughdraft CLI with the build, check and render commands on PATH. Works offline; no browser.
@@ -18,8 +18,8 @@ Run `roughdraft help` first. If it is not found, or it has no `check` and
 
 ## The loop
 
-1. Plan on paper: the boxes, the arrows between them, one reading
-   direction.
+1. Plan on paper: the things as boxes, what passes between them as
+   arrows, one reading direction (see Nouns in boxes, verbs on arrows).
 2. Write `<name>.skeleton.json` in a temporary directory, or next to the
    diagram when the user wants to keep it (later changes are then an edit
    and a rebuild).
@@ -31,7 +31,9 @@ Run `roughdraft help` first. If it is not found, or it has no `check` and
    wrong. In a diagram you built, warnings are wrong too.
 5. `roughdraft render <name>.excalidraw -o <tmp>/<name>.png`
    Look at the PNG. Fix crowding, long detours, labels that are hard to
-   read, and anything that does not say what was asked. Then the size:
+   read, and anything that does not say what was asked. It reads at a
+   glance when the shapes and arrow labels alone, without the notes, tell
+   the story. Then the size:
    `width` and `height` in render's output, divided by `scale`, must be
    at most 1600 and 900, or the reader scrolls (fixes: Fit one screen,
    under Layout). The PNG is for you: deliver it only when asked.
@@ -41,6 +43,20 @@ Run `roughdraft help` first. If it is not found, or it has no `check` and
 All three commands print JSON on stdout and never prompt. `render` takes
 `--dark` (Excalidraw's dark mode, PNG and SVG) and `--scale N` (PNG,
 default 2); see Sharing for its formats.
+
+## Nouns in boxes, verbs on arrows
+
+A diagram shows at a glance what the things are and what passes between
+them.
+
+- A box names a thing: an actor, a service, a store. One to three words,
+  two lines at most.
+- An arrow says what happens, in a verb phrase of up to five words
+  (`POST /orders`, `3 retry on timeout`). Draw each thing once and number the
+  arrows when order matters: a sequence of steps becomes numbered arrows
+  between the same few boxes.
+- Detail beyond that (limits, timings, error cases) goes in one note of
+  at most three lines, or in your reply next to the diagram.
 
 ## The skeleton
 
@@ -138,8 +154,8 @@ A JSON array of items. A complete example:
   or your line breaks.
 - Size every shape. Without `width` a labelled shape hugs its label, and
   boxes of one row come out different sizes. Boxes: 160 to 220 wide, 70
-  high for one or two lines of label, plus 25 for each line more. Give
-  shapes of one role, and the items of one row, the same size.
+  high for their one or two lines of label. Give shapes of one role, and
+  the items of one row, the same size.
 - `row` lays its children out left to right, `column` top to bottom, in
   order: `gap` (default 40) between them, `align` `start`, `center`
   (default) or `end` across. Groups nest: for a different gap between some
@@ -183,8 +199,9 @@ Arrows with bends, frames, arrowheads and every field:
   Too tall: the reverse. Still too big: shorten labels, then split.
 - 4 to 12 shapes per diagram. Split bigger subjects into several diagrams.
 - A title as free text above the first row, `fontSize` 28, about 90 above
-  it. Put a note (free text, `fontSize` 16) in a row or column with what
-  it explains: `{"type": "row", "gap": 20, "children": [shape, note]}`.
+  it. Put a note (free text, `fontSize` 16, at most three lines) in a row
+  or column with what it explains:
+  `{"type": "row", "gap": 20, "children": [shape, note]}`.
 - Group related shapes in a `frame` with a `name`, rather than a big
   rectangle drawn behind them. The name sits 25 above the frame: leave 60
   between stacked frames, and bring arrows into a frame from the side, not
@@ -213,7 +230,7 @@ for light mode; `render --dark` shows how Excalidraw's dark mode shows them.
 
 | Kind                                                                                       | Fix in the skeleton                                                                       |
 | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `label-overflow`                                                                           | widen or heighten the shape, or shorten the label                                         |
+| `label-overflow`                                                                           | shorten the label (move detail onto an arrow or a note), or widen the shape               |
 | `arrow-too-short`                                                                          | raise the `gap` between its shapes by the amount given, or shorten the label              |
 | `arrow-label-overlap`                                                                      | move the shape or the arrow the label covers                                              |
 | `arrows-stacked`                                                                           | one arrow with `startArrowhead`, or route one with `points`                               |
